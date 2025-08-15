@@ -89,16 +89,37 @@ install_python() {
   fi
 }
 
-# ---------- Django через pip ----------
+# ---------- Django через venv ----------
 install_django() {
-  if python3 -m pip show django >/dev/null 2>&1; then
-    say "Django вже встановлено: $(python3 -m django --version 2>/dev/null || echo '?')"
-  else
-    say "Встановлюю Django через pip…"
-    python3 -m pip install --user --upgrade pip
-    python3 -m pip install --user django
-    say "Django версія: $(python3 -m django --version)"
+  say "Готую віртуальне середовище для Python/Django…"
+
+  # встановимо модуль venv, якщо його немає
+  $SUDO apt-get update -y
+  $SUDO apt-get install -y python3-venv
+
+  VENV_DIR="${HOME}/.venvs/devtools"
+  mkdir -p "${HOME}/.venvs"
+
+  # створимо venv, якщо ще не існує
+  if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
+    python3 -m venv "${VENV_DIR}"
   fi
+
+  # оновимо pip/setuptools і поставимо Django усередині venv
+  "${VENV_DIR}/bin/python" -m pip install -U pip setuptools wheel
+  if "${VENV_DIR}/bin/python" -m pip show django >/dev/null 2>&1; then
+    say "Django вже встановлено у venv: $("${VENV_DIR}/bin/python" -m django --version)"
+  else
+    say "Встановлюю Django у venv…"
+    "${VENV_DIR}/bin/python" -m pip install -U django
+    say "Django версія: $("${VENV_DIR}/bin/python" -m django --version)"
+  fi
+
+  # підкажемо, як користуватись
+  echo
+  say "Щоб працювати з Django, активуй середовище:"
+  echo "  source ${VENV_DIR}/bin/activate"
+  echo "Після активації: python -m django --version, django-admin, тощо."
 }
 
 # ---------- main ----------
