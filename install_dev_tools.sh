@@ -1,145 +1,134 @@
 #!/usr/bin/env bash
 # install_dev_tools.sh
-# Автоматичне встановлення Docker, Docker Compose, Python (>=3.9) та Django
-# Підходить для Ubuntu/Debian. Скрипт ідемпотентний.
+# Автоматична інсталяція Docker, Docker Compose, Python (>=3.9) та Django
+# Працює на Ubuntu/Debian. Ідемпотентний.
 
 set -euo pipefail
 
 # ---------- утиліти ----------
 GREEN="\e[32m"; YELLOW="\e[33m"; RED="\e[31m"; NC="\e[0m"
 say()  { echo -e "${GREEN}==>${NC} $*"; }
-warn() { echo -e "${YELLOW}==> $*${NC}"; }
+warn() { echo -e "${YELLOW}==>${NC} $*"; }
 die()  { echo -e "${RED}ERROR:${NC} $*" >&2; exit 1; }
 
-need_cmd() { command -v "$1" >/dev/null 2>&1; }
-ver() { printf "%03d%03d%03d\n" $(echo "${1:-0.0.0}" | tr '.' ' '); }
+SUDO=""
+if [[ $EUID -ne 0 ]]; then SUDO="sudo"; fi
 
-require_apt() {
-  need_cmd apt-get || die "Це не схоже на Ubuntu/Debian (apt-get не знайдено)."
+need_cmd() {
+  command -v "$1" >/dev/null 2>&1
 }
 
-require_sudo() {
-  if [[ $EUID -ne 0 ]]; then
-    need_cmd sudo || die "Потрібні права root або пакет sudo."
-    SUDO="sudo"
-  else
-    SUDO=""
-  fi
-}
-
-apt_update_once() {
-  # запускаємо update лише один раз
-  if [[ -z "${APT_UPDATED:-}" ]]; then
-    say "Оновлюю кеш пакетів apt..."
+# ---------- Docker repo (офіційний) ----------
+ensure_docker_repo() {
+  if ! apt-cache policy 2>/dev/null | grep -q 'download.docker.com'; then
+    say "Додаю офіційний репозиторій Docker…"
     $SUDO apt-get update -y
-    APT_UPDATED=1
+    $SUDO apt-get install -y ca-certificates curl gnupg lsb-release
+    $SUDO install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+      | $SUDO gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    $SUDO chmod a+r /etc/apt/keyrings/docker.gpg
+
+    codename="$($SUDO bash -lc 'source /etc/os-release; echo $VERSION_CODENAME')"
+    echo "deb [arch=$(dpkg --print-architecture) \
+signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+$codename stable" | $SUDO tee /etc/apt/sources.list.d/docker.list >/dev/null
+
+    $SUDO apt-get update -y
   fi
 }
 
-# ---------- Docker + Compose ----------
+# ---------- Docker ----------
 install_docker() {
   if need_cmd docker; then
     say "Docker вже встановлено: $(docker --version)"
   else
-    say "Встановлюю Docker CE з офіційного репозиторію..."
-    apt_update_once
-    $SUDO apt-get install -y ca-certificates curl gnupg lsb-release
-    # ключ і репозиторій
-    if [[ ! -f /etc/apt/keyrings/docker.gpg ]]; then
-      $SUDO install -m 0755 -d /etc/apt/keyrings
-      curl -fsSL https://download.docker.com/linux/$(. /etc/os-release; echo "$ID")/gpg | \
-        $SUDO gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-      $SUDO chmod a+r /etc/apt/keyrings/docker.gpg
-    fi
-    echo \
-"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$(. /etc/os-release; echo "$ID") \
-$($SUDO bash -lc 'source /etc/os-release; echo $VERSION_CODENAME') stable" | \
-      $SUDO tee /etc/apt/sources.list.d/docker.list >/dev/null
-
-    apt_update_once
-    $SUDO apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-    $SUDO systemctl enable --now docker
-    # додати поточного користувача до групи docker (щоб працювати без sudo)
-    if getent group docker >/dev/null; then
-      $SUDO usermod -aG docker "${SUDO_USER:-$USER}" || true
-      warn "Щоб працювати з docker без sudo, перелогінься або виконай: newgrp docker"
-    fi
+    say "Встановлюю Docker…"
+    ensure_docker_repo
+    $SUDO apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin
+    say "Додаю поточного користувача до групи docker (щоб працювати без sudo)…"
+    $SUDO usermod -aG docker "$USER" || true
   fi
-
-  # Compose  (docker compose)
-  install_docker_compose() {
-    if command -v docker-compose &>/dev/null || docker compose version &>/dev/null; then
-        say "Docker Compose вже встановлено: $(docker compose version 2>/dev/null || docker-compose --version)"
-    else
-        say "Встановлюю Docker Compose..."
-        sudo apt-get update
-        sudo apt-get install -y curl gnupg lsb-release
-
-        # Додаємо офіційний репозиторій Docker
-        sudo mkdir -p /etc/apt/keyrings
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-        echo \
-          "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-          $(lsb_release -cs) stable" | \
-          sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-        sudo apt-get update
-        sudo apt-get install -y docker-compose-plugin
-    fi
 }
 
+# ---------- Docker Compose ----------
+install_docker_compose() {
+  # Підійде як плагін `docker compose`, так і класичний `docker-compose`
+  if docker compose version >/dev/null 2>&1; then
+    say "Docker Compose вже встановлено: $(docker compose version)"
+  elif need_cmd docker-compose; then
+    say "Docker Compose (standalone) вже встановлено: $(docker-compose --version)"
+  else
+    say "Встановлюю Docker Compose (docker-compose-plugin)…"
+    ensure_docker_repo
+    $SUDO apt-get install -y docker-compose-plugin
+    say "Перевірка: $(docker compose version)"
+  fi
+}
 
 # ---------- Python (>=3.9) ----------
 install_python() {
-  local need_new=0 cur="0.0.0"
-
+  local need_new=0
   if need_cmd python3; then
-    cur="$(python3 --version 2>&1 | awk '{print $2}')"
-    [[ $(ver "$cur") -lt $(ver "3.9.0") ]] && need_new=1
+    cur="$(python3 -V 2>&1 | awk '{print $2}')"
+    # Порівняння версій через dpkg:
+    if dpkg --compare-versions "$cur" lt "3.9"; then
+      need_new=1
+    fi
   else
     need_new=1
   fi
 
-  if [[ $need_new -eq 0 ]]; then
-    say "Python вже є (${cur}), pip: $(python3 -m pip --version 2>/dev/null || echo 'немає')"
+  if [[ $need_new -eq 1 ]]; then
+    say "Встановлюю Python 3.9+ і pip…"
+    $SUDO apt-get update -y
+    $SUDO apt-get install -y python3 python3-pip
   else
-    say "Встановлюю Python 3 (намагаюся отримати >= 3.9)…"
-    apt_update_once
-    # на більшості підтримуваних Ubuntu/Debian цього достатньо:
-    $SUDO apt-get install -y python3 python3-pip python3-venv
-    if need_cmd python3; then
-      cur="$(python3 --version 2>&1 | awk '{print $2}')"
-    fi
-    if [[ $(ver "$cur") -lt $(ver "3.9.0") ]]; then
-      warn "Стандартні репозиторії дають Python ${cur} < 3.9 — підключаю PPA deadsnakes…"
-      $SUDO apt-get install -y software-properties-common
-      $SUDO add-apt-repository -y ppa:deadsnakes/ppa
-      apt_update_once
-      $SUDO apt-get install -y python3.10 python3.10-venv python3-pip
-      $SUDO update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 2 || true
-    fi
-    say "Python тепер: $(python3 --version 2>&1)"
+    say "Python вже є ($(python3 -V)); pip: $(python3 -m pip -V 2>/dev/null || echo 'відсутній')"
+    $SUDO apt-get install -y python3-pip
   fi
 }
 
-# ---------- Django ----------
+# ---------- Django через venv ----------
 install_django() {
-  if python3 -m pip show django >/dev/null 2>&1; then
-    say "Django вже встановлено: версія $(python3 -m django --version 2>/dev/null || echo '?')"
-  else
-    say "Встановлюю Django через pip…"
-    python3 -m pip install --upgrade pip >/dev/null 2>&1 || true
-    python3 -m pip install Django
-    say "Django встановлено: версія $(python3 -m django --version)"
+  say "Готую віртуальне середовище для Python/Django…"
+
+  # встановимо модуль venv, якщо його немає
+  $SUDO apt-get update -y
+  $SUDO apt-get install -y python3-venv
+
+  VENV_DIR="${HOME}/.venvs/devtools"
+  mkdir -p "${HOME}/.venvs"
+
+  # створимо venv, якщо ще не існує
+  if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
+    python3 -m venv "${VENV_DIR}"
   fi
+
+  # оновимо pip/setuptools і поставимо Django усередині venv
+  "${VENV_DIR}/bin/python" -m pip install -U pip setuptools wheel
+  if "${VENV_DIR}/bin/python" -m pip show django >/dev/null 2>&1; then
+    say "Django вже встановлено у venv: $("${VENV_DIR}/bin/python" -m django --version)"
+  else
+    say "Встановлюю Django у venv…"
+    "${VENV_DIR}/bin/python" -m pip install -U django
+    say "Django версія: $("${VENV_DIR}/bin/python" -m django --version)"
+  fi
+
+  # підкажемо, як користуватись
+  echo
+  say "Щоб працювати з Django, активуй середовище:"
+  echo "  source ${VENV_DIR}/bin/activate"
+  echo "Після активації: python -m django --version, django-admin, тощо."
 }
 
 # ---------- main ----------
-require_apt
-require_sudo
-install_docker
-install_python
-install_django
+main() {
+  install_docker
+  install_docker_compose
+  install_python
+  install_django
+  say "Готово! Можливо, потрібно перелогінитись, щоб група docker застосувалася."
+}
 
-say "Готово! ✅"
-echo -e "${YELLOW}Якщо вас додали до групи docker — перелогіньтесь або виконайте: newgrp docker${NC}"
+main "$@"
