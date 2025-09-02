@@ -1,0 +1,21 @@
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+crash.log
+
+# Python virtual environments
+venv/
+.venv/
+
+# Ignore Terraform state files and local directories
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+crash.log
+.terraform/
+lesson-5/.terraform/
+
+# IDE files (example for VSCode)
+.vscode/
+.idea/
