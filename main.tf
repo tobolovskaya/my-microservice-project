@@ -49,7 +49,8 @@ module "ecr" {
   ecr_name     = "lesson-5-ecr"
   scan_on_push = true
   tags = {
-    Project = "lesson-5"
+    Project     = "lesson-5"
+    Environment = "dev"
   }
 }
 
