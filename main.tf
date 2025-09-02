@@ -23,7 +23,7 @@ provider "aws" {
 
 module "s3_backend" {
   source      = "./modules/s3-backend"
-  bucket_name = var.backend_bucket_name   # змінну оголошено нижче
+  bucket_name = var.backend_bucket_name # змінну оголошено нижче
   table_name  = "terraform-locks"
   tags = {
     Project = "lesson-5"
@@ -38,7 +38,7 @@ module "vpc" {
   private_subnets    = ["10.0.4.0/24", "10.0.5.0/24", "10.0.6.0/24"]
   availability_zones = ["us-west-2a", "us-west-2b", "us-west-2c"]
   vpc_name           = "lesson-5-vpc"
-  single_nat_gateway = true               # 1 NAT для економії. Постав false, якщо треба по NAT на AZ.
+  single_nat_gateway = true # 1 NAT для економії. Постав false, якщо треба по NAT на AZ.
   tags = {
     Project = "lesson-5"
   }
@@ -58,11 +58,3 @@ variable "backend_bucket_name" {
   type        = string
   description = "S3 bucket name for TF state (must be globally unique)"
 }
-
-# Зведені аутпути
-output "state_bucket"      { value = module.s3_backend.bucket_id }
-output "lock_table"        { value = module.s3_backend.dynamodb_table }
-output "vpc_id"            { value = module.vpc.vpc_id }
-output "public_subnet_ids" { value = module.vpc.public_subnet_ids }
-output "private_subnet_ids"{ value = module.vpc.private_subnet_ids }
-output "ecr_repo_url"      { value = module.ecr.repository_url }
