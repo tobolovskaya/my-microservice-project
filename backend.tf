@@ -1,7 +1,5 @@
-# backend.tf (у корені)
 terraform {
-  # Конфіг бекенду задаватимемо під час init через -backend-config
-  backend "s3" {}
+  required_version = ">= 1.3.0"
 
   required_providers {
     aws = {
@@ -9,10 +7,16 @@ terraform {
       version = "~> 5.0"
     }
   }
+
+  backend "s3" {
+    bucket         = "ВАШ_БАКЕТ_ДЛЯ_СТЕЙТІВ"
+    key            = "lesson-5/terraform.tfstate"
+    region         = "us-west-2"
+    dynamodb_table = "terraform-locks"
+    encrypt        = true
+  }
 }
 
-# Провайдер
 provider "aws" {
   region = var.region
 }
-
