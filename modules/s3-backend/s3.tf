@@ -1,20 +1,25 @@
-resource "aws_s3_bucket" "tfstate" {
+resource "aws_s3_bucket" "terraform_state" {
   bucket = var.bucket_name
-  tags   = var.tags
+
+  tags = {
+    Name        = "Terraform State Bucket"
+    Environment = "lesson-5"
+  }
 }
 
-resource "aws_s3_bucket_versioning" "tfstate" {
-  bucket = aws_s3_bucket.tfstate.id
+# Налаштовуємо версіонування для S3-бакета
+resource "aws_s3_bucket_versioning" "terraform_state_versioning" {
+  bucket = aws_s3_bucket.terraform_state.id
+
   versioning_configuration {
     status = "Enabled"
   }
 }
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "tfstate" {
-  bucket = aws_s3_bucket.tfstate.id
+# Встановлюємо контроль власності для S3-бакета
+resource "aws_s3_bucket_ownership_controls" "terraform_state_ownership" {
+  bucket = aws_s3_bucket.terraform_state.id
   rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
+    object_ownership = "BucketOwnerEnforced"
   }
 }

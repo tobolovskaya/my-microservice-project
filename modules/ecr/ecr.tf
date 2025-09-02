@@ -1,25 +1,32 @@
-resource "aws_ecr_repository" "this" {
+resource "aws_ecr_repository" "main" {
   name = var.ecr_name
-
   image_scanning_configuration {
     scan_on_push = var.scan_on_push
   }
 
-  tags = var.tags
+  tags = {
+    Name = var.ecr_name
+  }
 }
 
-# Приклад простої політики (доступ лише вашому акаунту; за потреби додай інші principals)
-data "aws_caller_identity" "current" {}
+resource "aws_ecr_repository_policy" "repo_policy" {
+  repository = aws_ecr_repository.main.name
 
-resource "aws_ecr_repository_policy" "policy" {
-  repository = aws_ecr_repository.this.name
   policy = jsonencode({
     Version = "2008-10-17",
-    Statement = [{
-      Sid       = "AllowAccountPushPull",
-      Effect    = "Allow",
-      Principal = { AWS = data.aws_caller_identity.current.account_id },
-      Action    = ["ecr:*"]
-    }]
+    Statement = [
+      {
+        Sid       = "AllowEC2ContainerServicePull",
+        Effect    = "Allow",
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        },
+        Action = [
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:BatchCheckLayerAvailability"
+        ]
+      }
+    ]
   })
 }

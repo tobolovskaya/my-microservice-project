@@ -1,25 +1,24 @@
 variable "vpc_cidr_block" {
-  type = string
+  description = "CIDR блок для VPC"
+  type        = string
 }
 
 variable "public_subnets" {
-  type = list(string)
+  description = "Список CIDR блоків для публічних підмереж"
+  type        = list(string)
 }
 
 variable "private_subnets" {
-  type = list(string)
+  description = "Список CIDR блоків для приватних підмереж"
+  type        = list(string)
 }
 
 variable "availability_zones" {
-  type = list(string)
+  description = "Список зон доступності для підмереж"
+  type        = list(string)
 }
 
 variable "vpc_name" {
-  type = string
-}
-
-variable "aws_region" {
-  description = "AWS region"
+  description = "Ім'я VPC"
   type        = string
-  default     = "us-west-2"
 }
