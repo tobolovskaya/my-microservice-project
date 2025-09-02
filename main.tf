@@ -1,11 +1,5 @@
 terraform {
   required_version = "~> 1.6"
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
 }
 
 # Регіон AWS для всіх модулів
@@ -15,11 +9,8 @@ variable "region" {
   default     = "us-west-2"
 }
 
-provider "aws" {
-  region = var.region
-}
-
 # ---- Підключаємо модулі ----
+variable "backend_bucket_name" { type = string }
 
 module "s3_backend" {
   source      = "./modules/s3-backend"
@@ -27,7 +18,6 @@ module "s3_backend" {
   table_name  = "terraform-locks"
   tags = {
     Project = "lesson-5"
-    Owner   = "you"
   }
 }
 

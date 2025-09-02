@@ -1,10 +1,18 @@
-# Після створення S3 + DynamoDB розкоментуй:
+# backend.tf (у корені)
+terraform {
+  # Конфіг бекенду задаватимемо під час init через -backend-config
+  backend "s3" {}
 
-terraform 
-backend "s3" {
-bucket         = "var.backend_bucket_name"     # те ж саме, що backend_bucket_name
-key            = "lesson-5/terraform.tfstate"
-region         = "us-west-2"
-dynamodb_table = "terraform-locks"
-encrypt        = true
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
   }
+}
+
+# Провайдер
+provider "aws" {
+  region = var.region
+}
+
