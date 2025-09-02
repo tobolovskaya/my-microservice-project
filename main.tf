@@ -2,15 +2,7 @@ terraform {
   required_version = "~> 1.6"
 }
 
-# Регіон AWS для всіх модулів
-variable "region" {
-  type        = string
-  description = "AWS region"
-  default     = "us-west-2"
-}
-
 # ---- Підключаємо модулі ----
-variable "backend_bucket_name" { type = string }
 
 module "s3_backend" {
   source      = "./modules/s3-backend"
@@ -42,10 +34,4 @@ module "ecr" {
     Project     = "lesson-5"
     Environment = "dev"
   }
-}
-
-# коренева змінна для імені бакета бекенду
-variable "backend_bucket_name" {
-  type        = string
-  description = "S3 bucket name for TF state (must be globally unique)"
 }
