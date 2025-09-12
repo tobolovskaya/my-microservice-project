@@ -1,8 +1,0 @@
-# Приклад файлу terraform.tfvars
-# Скопіюйте цей файл як terraform.tfvars та заповніть своїми значеннями
-
-# Унікальне ім'я для S3 бакета (має бути глобально унікальним)
-backend_bucket_name = "your-unique-terraform-state-bucket-name-12345"
-
-# Регіон AWS
-region = "us-west-2"
