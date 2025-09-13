@@ -54,6 +54,27 @@ module "rds" {
   tags = var.common_tags
 }
 
+# Модуль EKS
+module "eks" {
+  source = "./modules/eks"
+  
+  # Основні параметри
+  cluster_name       = var.eks_cluster_name
+  kubernetes_version = var.kubernetes_version
+  
+  # Мережеві параметри
+  vpc_id     = module.vpc.vpc_id
+  subnet_ids = concat(module.vpc.private_subnet_ids, module.vpc.public_subnet_ids)
+  
+  # Node Groups
+  node_groups = var.node_groups
+  
+  # EBS CSI Driver
+  enable_ebs_csi_driver = var.enable_ebs_csi_driver
+  
+  tags = var.common_tags
+}
+
 # Змінні
 variable "aws_region" {
   description = "AWS регіон"
@@ -149,6 +170,67 @@ variable "maintenance_window" {
   description = "Вікно для обслуговування"
   type        = string
   default     = "sun:04:00-sun:05:00"
+}
+
+# EKS змінні
+variable "eks_cluster_name" {
+  description = "Назва EKS кластера"
+  type        = string
+  default     = "my-eks-cluster"
+}
+
+variable "kubernetes_version" {
+  description = "Версія Kubernetes"
+  type        = string
+  default     = "1.28"
+}
+
+variable "node_groups" {
+  description = "Конфігурація node groups"
+  type = list(object({
+    name                         = string
+    instance_types              = list(string)
+    ami_type                    = string
+    capacity_type               = string
+    desired_size                = number
+    max_size                    = number
+    min_size                    = number
+    max_unavailable_percentage  = number
+    disk_size                   = number
+    disk_type                   = string
+    subnet_ids                  = list(string)
+    labels                      = map(string)
+    taints = list(object({
+      key    = string
+      value  = string
+      effect = string
+    }))
+    bootstrap_extra_args = string
+  }))
+  default = [
+    {
+      name                        = "main"
+      instance_types             = ["t3.medium"]
+      ami_type                   = "AL2_x86_64"
+      capacity_type              = "ON_DEMAND"
+      desired_size               = 2
+      max_size                   = 4
+      min_size                   = 1
+      max_unavailable_percentage = 25
+      disk_size                  = 50
+      disk_type                  = "gp3"
+      subnet_ids                 = []
+      labels                     = {}
+      taints                     = []
+      bootstrap_extra_args       = ""
+    }
+  ]
+}
+
+variable "enable_ebs_csi_driver" {
+  description = "Увімкнути AWS EBS CSI Driver"
+  type        = bool
+  default     = true
 }
 
 variable "common_tags" {

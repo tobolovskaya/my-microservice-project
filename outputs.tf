@@ -52,3 +52,34 @@ output "parameter_group_name" {
   description = "Назва Parameter Group"
   value       = module.rds.parameter_group_name
 }
+
+# EKS виводи
+output "eks_cluster_id" {
+  description = "ID EKS кластера"
+  value       = module.eks.cluster_id
+}
+
+output "eks_cluster_endpoint" {
+  description = "Endpoint EKS кластера"
+  value       = module.eks.cluster_endpoint
+}
+
+output "eks_cluster_name" {
+  description = "Назва EKS кластера"
+  value       = module.eks.cluster_name
+}
+
+output "kubectl_config_command" {
+  description = "Команда для налаштування kubectl"
+  value       = module.eks.kubectl_config_command
+}
+
+output "cluster_security_group_id" {
+  description = "ID Security Group EKS кластера"
+  value       = module.eks.cluster_security_group_id
+}
+
+output "node_security_group_id" {
+  description = "ID Security Group для EKS node groups"
+  value       = module.eks.node_security_group_id
+}

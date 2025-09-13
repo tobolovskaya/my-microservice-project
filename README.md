@@ -25,12 +25,18 @@ Project/
     │   ├── routes.tf
     │   ├── variables.tf
     │   └── outputs.tf
-    └── rds/                # Модуль для RDS/Aurora
+    ├── rds/                # Модуль для RDS/Aurora
         ├── rds.tf          # Звичайна RDS
         ├── aurora.tf       # Aurora кластер
         ├── shared.tf       # Спільні ресурси
         ├── variables.tf    # Змінні
         └── outputs.tf      # Виводи
+    └── eks/                # Модуль для Kubernetes кластера
+        ├── eks.tf          # Створення кластера
+        ├── aws_ebs_csi_driver.tf # EBS CSI Driver
+        ├── variables.tf    # Змінні для EKS
+        ├── outputs.tf      # Виведення інформації
+        └── user_data.sh    # Скрипт для node groups
 ```
 
 ## 🚀 Швидкий старт
@@ -54,6 +60,10 @@ use_aurora = false  # true для Aurora
 db_engine = "postgres"
 db_password = "your-secure-password"
 
+# EKS налаштування
+eks_cluster_name = "my-cluster"
+kubernetes_version = "1.28"
+
 # Теги
 common_tags = {
   Environment = "dev"
@@ -68,6 +78,16 @@ common_tags = {
 terraform init
 terraform plan
 terraform apply
+```
+
+### 4. Підключення до EKS кластера
+
+```bash
+# Налаштування kubectl
+aws eks update-kubeconfig --region us-west-2 --name my-cluster
+
+# Перевірка підключення
+kubectl get nodes
 ```
 
 ## 📖 Приклади використання
@@ -98,6 +118,71 @@ module "rds" {
   multi_az                = false
   backup_retention_period = 7
   storage_encrypted      = true
+  
+  tags = {
+    Environment = "production"
+    Project     = "my-app"
+  }
+}
+```
+
+### EKS кластер з node groups
+
+```hcl
+module "eks" {
+  source = "./modules/eks"
+  
+  # Основні параметри
+  cluster_name       = "production-cluster"
+  kubernetes_version = "1.28"
+  
+  # Мережа
+  vpc_id     = module.vpc.vpc_id
+  subnet_ids = module.vpc.private_subnet_ids
+  
+  # Node Groups
+  node_groups = [
+    {
+      name           = "main"
+      instance_types = ["t3.medium"]
+      desired_size   = 3
+      max_size       = 5
+      min_size       = 1
+      disk_size      = 50
+      subnet_ids     = module.vpc.private_subnet_ids
+      labels = {
+        Environment = "production"
+        NodeGroup   = "main"
+      }
+      taints = []
+      bootstrap_extra_args = ""
+    },
+    {
+      name           = "spot"
+      instance_types = ["t3.large", "t3.xlarge"]
+      capacity_type  = "SPOT"
+      desired_size   = 2
+      max_size       = 10
+      min_size       = 0
+      disk_size      = 100
+      subnet_ids     = module.vpc.private_subnet_ids
+      labels = {
+        Environment = "production"
+        NodeGroup   = "spot"
+      }
+      taints = [
+        {
+          key    = "spot"
+          value  = "true"
+          effect = "NO_SCHEDULE"
+        }
+      ]
+      bootstrap_extra_args = "--container-runtime containerd"
+    }
+  ]
+  
+  # EBS CSI Driver
+  enable_ebs_csi_driver = true
   
   tags = {
     Environment = "production"
@@ -240,6 +325,15 @@ module "mysql_rds" {
 | `backup_retention_period` | `number` | `7` | Період зберігання бекапів (дні) |
 | `backup_window` | `string` | `"03:00-04:00"` | Вікно бекапів (UTC) |
 | `maintenance_window` | `string` | `"sun:04:00-sun:05:00"` | Вікно обслуговування |
+### EKS параметри
+
+| Змінна | Тип | За замовчуванням | Опис |
+|--------|-----|------------------|------|
+| `eks_cluster_name` | `string` | `"my-eks-cluster"` | Назва EKS кластера |
+| `kubernetes_version` | `string` | `"1.28"` | Версія Kubernetes |
+| `node_groups` | `list(object)` | `[...]` | Конфігурація node groups |
+| `enable_ebs_csi_driver` | `bool` | `true` | Увімкнути EBS CSI Driver |
+
 | `deletion_protection` | `bool` | `true` | Захист від видалення |
 
 ### Моніторинг
@@ -261,6 +355,15 @@ module "mysql_rds" {
 | `port` | Порт бази даних |
 | `connection_string` | Повний рядок підключення |
 
+### EKS виводи
+
+| Вивід | Опис |
+|-------|------|
+| `eks_cluster_endpoint` | Endpoint EKS кластера |
+| `kubectl_config_command` | Команда для налаштування kubectl |
+| `cluster_security_group_id` | ID Security Group кластера |
+| `node_security_group_id` | ID Security Group node groups |
+
 ### Ідентифікатори
 
 | Вивід | Опис |
@@ -269,6 +372,54 @@ module "mysql_rds" {
 | `cluster_id` | ID Aurora кластера |
 | `security_group_id` | ID Security Group |
 | `subnet_group_name` | Назва DB Subnet Group |
+
+## 🔧 Робота з EKS
+
+### Підключення до кластера
+
+```bash
+# Отримання команди підключення
+terraform output kubectl_config_command
+
+# Виконання команди
+aws eks update-kubeconfig --region us-west-2 --name my-cluster
+
+# Перевірка
+kubectl get nodes
+kubectl get pods --all-namespaces
+```
+
+### Встановлення додатків
+
+```bash
+# Встановлення Helm
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+# Додавання репозиторіїв
+helm repo add stable https://charts.helm.sh/stable
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
+
+# Встановлення NGINX Ingress Controller
+helm install nginx-ingress bitnami/nginx-ingress-controller
+
+# Встановлення cert-manager
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
+```
+
+### Масштабування node groups
+
+```bash
+# Масштабування через AWS CLI
+aws eks update-nodegroup-config \
+  --cluster-name my-cluster \
+  --nodegroup-name main \
+  --scaling-config minSize=2,maxSize=6,desiredSize=4
+
+# Або через Terraform
+# Змініть desired_size в terraform.tfvars та виконайте:
+terraform apply
+```
 
 ## 🔄 Зміна типу БД
 
@@ -310,6 +461,51 @@ instance_class = "db.t3.small"  # Збільшення розміру
 terraform apply
 ```
 
+## 🚀 Розгортання додатків в EKS
+
+### Приклад Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+      - name: my-app
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: my-app-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-app-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 10Gi
+```
+
 ## 🛡️ Безпека
 
 ### Рекомендації
@@ -318,6 +514,8 @@ terraform apply
 2. **Мережа**: Розміщуйте БД в приватних підмережах
 3. **Шифрування**: Завжди увімкнене за замовчуванням
 4. **Доступ**: Обмежуйте через Security Groups
+5. **EKS**: Використовуйте RBAC та Pod Security Standards
+6. **Secrets**: Зберігайте секрети в AWS Secrets Manager або Kubernetes Secrets
 
 ### Приклад з Secrets Manager
 
@@ -339,23 +537,75 @@ module "rds" {
 }
 ```
 
+### RBAC для EKS
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: developer
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps"]
+  verbs: ["get", "list", "create", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: developer-binding
+subjects:
+- kind: User
+  name: developer@company.com
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: developer
+  apiGroup: rbac.authorization.k8s.io
+```
+
 ## 💰 Оптимізація вартості
 
 ### Для розробки
 ```hcl
+# RDS
 instance_class = "db.t3.micro"
 multi_az = false
 backup_retention_period = 1
 deletion_protection = false
+
+# EKS
+node_groups = [
+  {
+    name           = "dev"
+    instance_types = ["t3.small"]
+    capacity_type  = "SPOT"
+    desired_size   = 1
+    max_size       = 2
+    min_size       = 1
+  }
+]
 ```
 
 ### Для продакшну
 ```hcl
+# RDS
 instance_class = "db.r6g.large"
 multi_az = true
 backup_retention_period = 30
 deletion_protection = true
 performance_insights_enabled = true
+
+# EKS
+node_groups = [
+  {
+    name           = "production"
+    instance_types = ["m5.large"]
+    capacity_type  = "ON_DEMAND"
+    desired_size   = 3
+    max_size       = 10
+    min_size       = 3
+  }
+]
 ```
 
 ### Aurora Serverless для змінних навантажень
@@ -385,6 +635,16 @@ monitoring_interval = 60  # Детальний моніторинг кожну �
 performance_insights_enabled = true
 ```
 
+### EKS Monitoring
+```bash
+# Встановлення Prometheus та Grafana
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm install prometheus prometheus-community/kube-prometheus-stack
+
+# Доступ до Grafana
+kubectl port-forward svc/prometheus-grafana 3000:80
+```
+
 ## 🚨 Усунення проблем
 
 ### Поширені помилки
@@ -392,10 +652,13 @@ performance_insights_enabled = true
 1. **Недостатньо підмереж**: Потрібно мінімум 2 підмережі в різних AZ
 2. **Неправильний CIDR**: Перевірте, що CIDR блоки не перетинаються
 3. **Версія движка**: Використовуйте підтримувані версії AWS
+4. **EKS версія**: Перевірте сумісність версій Kubernetes та add-ons
+5. **IAM права**: Переконайтеся, що у вас є необхідні права для створення EKS
 
 ### Корисні команди
 
 ```bash
+# Terraform
 # Перевірка стану
 terraform state list
 terraform state show module.rds.aws_db_instance.main
@@ -405,13 +668,28 @@ terraform import module.rds.aws_db_instance.main mydb-instance
 
 # Планування змін
 terraform plan -target=module.rds
+
+# EKS
+# Перевірка кластера
+kubectl cluster-info
+kubectl get nodes -o wide
+
+# Логи pod'ів
+kubectl logs -f deployment/my-app
+
+# Опис ресурсів
+kubectl describe node <node-name>
+kubectl describe pod <pod-name>
 ```
 
 ## 📚 Додаткові ресурси
 
 - [AWS RDS Documentation](https://docs.aws.amazon.com/rds/)
 - [AWS Aurora Documentation](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/)
+- [AWS EKS Documentation](https://docs.aws.amazon.com/eks/)
+- [Kubernetes Documentation](https://kubernetes.io/docs/)
 - [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
+- [EKS Best Practices](https://aws.github.io/aws-eks-best-practices/)
 
 ## 🤝 Внесок
 
@@ -428,5 +706,5 @@ terraform plan -target=module.rds
 ---
 
 **Автор**: DevOps Engineer  
-**Проєкт**: Terraform RDS Module  
+**Проєкт**: Terraform Infrastructure Modules  
 **Версія**: 1.0.0
