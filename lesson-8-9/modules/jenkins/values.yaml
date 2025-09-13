@@ -1,0 +1,175 @@
+controller:
+  # Jenkins controller configuration
+  image: "jenkins/jenkins"
+  tag: "2.426.1-lts"
+  
+  # Resources
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+  
+  # Service configuration
+  serviceType: LoadBalancer
+  servicePort: 8080
+  
+  # Admin user
+  adminUser: "admin"
+  
+  # Jenkins Configuration as Code
+  JCasC:
+    defaultConfig: true
+    configScripts:
+      welcome-message: |
+        jenkins:
+          systemMessage: "Welcome to Jenkins CI/CD for lesson-8-9!"
+          numExecutors: 2
+          scmCheckoutRetryCount: 3
+          mode: NORMAL
+        
+        security:
+          globalJobDslSecurityConfiguration:
+            useScriptSecurity: false
+        
+        unclassified:
+          location:
+            adminAddress: "admin@example.com"
+            url: "http://jenkins.example.com/"
+      
+      kubernetes-config: |
+        jenkins:
+          clouds:
+            - kubernetes:
+                name: "kubernetes"
+                serverUrl: "https://kubernetes.default"
+                namespace: "jenkins"
+                jenkinsUrl: "http://jenkins:8080"
+                jenkinsTunnel: "jenkins-agent:50000"
+                connectTimeout: 0
+                readTimeout: 0
+                maxRequestsPerHost: 32
+                templates:
+                  - name: "kaniko"
+                    label: "kaniko"
+                    nodeUsageMode: EXCLUSIVE
+                    containers:
+                      - name: "kaniko"
+                        image: "gcr.io/kaniko-project/executor:debug"
+                        command: "/busybox/cat"
+                        ttyEnabled: true
+                        privileged: false
+                        resourceRequestCpu: "500m"
+                        resourceRequestMemory: "1Gi"
+                        resourceLimitCpu: "1000m"
+                        resourceLimitMemory: "2Gi"
+                        envVars:
+                          - envVar:
+                              key: "DOCKER_CONFIG"
+                              value: "/kaniko/.docker"
+                        volumeMounts:
+                          - mountPath: "/kaniko/.docker"
+                            name: "docker-config"
+                            readOnly: false
+                      - name: "git"
+                        image: "alpine/git:latest"
+                        command: "/bin/sh"
+                        args: "-c cat"
+                        ttyEnabled: true
+                        resourceRequestCpu: "100m"
+                        resourceRequestMemory: "128Mi"
+                    volumes:
+                      - configMapVolume:
+                          configMapName: "kaniko-config"
+                          mountPath: "/kaniko/.docker"
+                    serviceAccount: "jenkins-sa"
+                    yaml: |
+                      spec:
+                        securityContext:
+                          runAsUser: 0
+                          runAsGroup: 0
+                          fsGroup: 0
+
+  # Install plugins
+  installPlugins:
+    - kubernetes:3937.vd7b_82db_e347b_
+    - workflow-aggregator:596.v8c21c963d92d
+    - git:5.0.0
+    - configuration-as-code:1625.v27444588cc3d
+    - blueocean:1.25.8
+    - pipeline-stage-view:2.25
+    - docker-workflow:563.vd5d2e5c4007f
+    - github:1.37.3
+    - pipeline-github-lib:42.v0739460cda_c4
+    - job-dsl:1.84
+    - build-timeout:1.27
+    - timestamper:1.25
+    - ws-cleanup:0.45
+    - ant:475.vf34069fef73c
+    - gradle:2.8.2
+    - workflow-cps:3659.v582dc37621d8
+    - pipeline-milestone-step:111.v449306f708b_7
+    - matrix-project:785.v06b_7f47b_c631
+    - resource-disposer:0.22
+    - ssh-slaves:2.877.v365f5eb_a_b_eec
+    - email-ext:2.96
+    - mailer:448.v5b_97805e3767
+    - ldap:682.v7b_544c9d1512
+    - pam-auth:1.10
+    - matrix-auth:3.1.5
+    - antisamy-markup-formatter:159.v25b_c67cd35fb_
+    - build-name-setter:2.4.1
+    - copyartifact:705.v5295cffec284
+
+  # Security realm
+  securityRealm: |-
+    local:
+      allowsSignup: false
+      users:
+       - id: "${chart-admin-username}"
+         name: "Jenkins Admin"
+         password: "${chart-admin-password}"
+
+  # Authorization strategy
+  authorizationStrategy: |-
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+# Agent configuration
+agent:
+  enabled: true
+  image: "jenkins/inbound-agent"
+  tag: "3107.v665000b_51092-15"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# Persistence
+persistence:
+  enabled: true
+  size: "20Gi"
+  storageClass: "gp2"
+
+# Service Account
+serviceAccount:
+  create: false
+  name: "jenkins-sa"
+
+# RBAC
+rbac:
+  create: true
+  readSecrets: true
+
+# Network Policy
+networkPolicy:
+  enabled: false
+
+# Backup
+backup:
+  enabled: false
