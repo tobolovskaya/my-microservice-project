@@ -318,6 +318,24 @@ module "argocd" {
   ]
 }
 
+# Модуль моніторингу (Prometheus + Grafana)
+module "monitoring" {
+  source = "./setup-monitoring.tf"
+  
+  # Креденшели
+  grafana_admin_password = var.grafana_admin_password
+  
+  # Ingress налаштування
+  grafana_ingress_enabled  = var.grafana_ingress_enabled
+  grafana_ingress_hostname = var.grafana_ingress_hostname
+  
+  depends_on = [
+    module.eks,
+    module.jenkins,
+    module.argocd
+  ]
+}
+
 # Змінні
 variable "aws_region" {
   description = "AWS регіон"
@@ -1197,6 +1215,25 @@ variable "argocd_webhook_gitlab_secret" {
   type        = string
   default     = ""
   sensitive   = true
+}
+
+# Моніторинг змінні
+variable "grafana_admin_password" {
+  description = "Пароль адміністратора Grafana"
+  type        = string
+  sensitive   = true
+}
+
+variable "grafana_ingress_enabled" {
+  description = "Увімкнути Ingress для Grafana"
+  type        = bool
+  default     = false
+}
+
+variable "grafana_ingress_hostname" {
+  description = "Hostname для Grafana Ingress"
+  type        = string
+  default     = "grafana.local"
 }
 
 variable "common_tags" {

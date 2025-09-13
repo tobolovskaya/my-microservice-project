@@ -1,0 +1,122 @@
+pipeline {
+    agent {
+        kubernetes {
+            yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: docker
+    image: docker:latest
+    command:
+    - cat
+    tty: true
+    volumeMounts:
+    - mountPath: /var/run/docker.sock
+      name: docker-sock
+  - name: kubectl
+    image: bitnami/kubectl:latest
+    command:
+    - cat
+    tty: true
+  - name: helm
+    image: alpine/helm:latest
+    command:
+    - cat
+    tty: true
+  volumes:
+  - name: docker-sock
+    hostPath:
+      path: /var/run/docker.sock
+"""
+        }
+    }
+    
+    environment {
+        ECR_REGISTRY = "${ECR_REGISTRY_URL}"
+        IMAGE_TAG = "${BUILD_NUMBER}"
+        APP_NAME = "django-app"
+        KUBECONFIG = credentials('kubeconfig')
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Build Docker Image') {
+            steps {
+                container('docker') {
+                    script {
+                        dir('Django') {
+                            sh """
+                                docker build -t ${ECR_REGISTRY}:${IMAGE_TAG} .
+                                docker tag ${ECR_REGISTRY}:${IMAGE_TAG} ${ECR_REGISTRY}:latest
+                            """
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Push to ECR') {
+            steps {
+                container('docker') {
+                    script {
+                        sh """
+                            aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                            docker push ${ECR_REGISTRY}:${IMAGE_TAG}
+                            docker push ${ECR_REGISTRY}:latest
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy to Kubernetes') {
+            steps {
+                container('helm') {
+                    script {
+                        sh """
+                            helm upgrade --install ${APP_NAME} ./charts/django-app \\
+                                --set image.repository=${ECR_REGISTRY} \\
+                                --set image.tag=${IMAGE_TAG} \\
+                                --set ingress.enabled=true \\
+                                --set ingress.hosts[0].host=django-app.local \\
+                                --namespace production \\
+                                --create-namespace \\
+                                --wait
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Verify Deployment') {
+            steps {
+                container('kubectl') {
+                    script {
+                        sh """
+                            kubectl get pods -n production -l app.kubernetes.io/name=django-app
+                            kubectl rollout status deployment/${APP_NAME} -n production
+                        """
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo "✅ Deployment successful! Application deployed with image tag: ${IMAGE_TAG}"
+        }
+        failure {
+            echo "❌ Deployment failed! Check the logs for details."
+        }
+        always {
+            cleanWs()
+        }
+    }
+}

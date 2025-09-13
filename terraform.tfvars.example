@@ -246,3 +246,8 @@ argocd_self_heal_timeout = 5
 argocd_enable_webhooks = true
 argocd_webhook_github_secret = ""
 argocd_webhook_gitlab_secret = ""
+
+# Моніторинг налаштування
+grafana_admin_password = "secure-grafana-password"  # ЗМІНІТЬ НА БЕЗПЕЧНИЙ ПАРОЛЬ!
+grafana_ingress_enabled = false
+grafana_ingress_hostname = "grafana.yourdomain.com"  # ЗМІНІТЬ НА ВАШ ДОМЕН!

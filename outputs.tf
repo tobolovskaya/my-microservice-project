@@ -179,3 +179,31 @@ output "argocd_api_url" {
   description = "URL для Argo CD API"
   value       = module.argocd.argocd_api_url
 }
+
+# Моніторинг виводи
+output "prometheus_url" {
+  description = "URL для доступу до Prometheus"
+  value       = "http://localhost:9090 (використовуйте kubectl port-forward)"
+}
+
+output "grafana_url" {
+  description = "URL для доступу до Grafana"
+  value       = "http://localhost:3000 (використовуйте kubectl port-forward)"
+}
+
+output "grafana_admin_password" {
+  description = "Пароль адміністратора Grafana"
+  value       = var.grafana_admin_password
+  sensitive   = true
+}
+
+# Команди для доступу до моніторингу
+output "prometheus_port_forward_command" {
+  description = "Команда для port-forward до Prometheus"
+  value       = "kubectl port-forward svc/prometheus-kube-prometheus-prometheus 9090:9090 -n monitoring"
+}
+
+output "grafana_port_forward_command" {
+  description = "Команда для port-forward до Grafana"
+  value       = "kubectl port-forward svc/prometheus-grafana 3000:80 -n monitoring"
+}
