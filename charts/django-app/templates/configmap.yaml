@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "django-app.fullname" . }}-config
+  labels:
+    {{- include "django-app.labels" . | nindent 4 }}
+data:
+  # Django configuration
+  DJANGO_SETTINGS_MODULE: {{ .Values.django.settings.module | quote }}
+  DJANGO_DEBUG: {{ .Values.django.settings.debug | quote }}
+  DJANGO_ALLOWED_HOSTS: {{ .Values.django.settings.allowedHosts | quote }}
+  
+  # Database configuration
+  DB_ENGINE: {{ .Values.django.database.engine | quote }}
+  DB_NAME: {{ .Values.django.database.name | quote }}
+  DB_USER: {{ .Values.django.database.user | quote }}
+  DB_HOST: {{ .Values.django.database.host | quote }}
+  DB_PORT: {{ .Values.django.database.port | quote }}
+  
+  # Static files configuration
+  {{- if .Values.django.staticFiles.enabled }}
+  STATIC_URL: {{ .Values.django.staticFiles.url | quote }}
+  STATIC_ROOT: {{ .Values.django.staticFiles.root | quote }}
+  {{- end }}
+  
+  # Media files configuration
+  {{- if .Values.django.mediaFiles.enabled }}
+  MEDIA_URL: {{ .Values.django.mediaFiles.url | quote }}
+  MEDIA_ROOT: {{ .Values.django.mediaFiles.root | quote }}
+  {{- end }}
+  
+  # Email configuration
+  {{- if .Values.django.email.backend }}
+  EMAIL_BACKEND: {{ .Values.django.email.backend | quote }}
+  EMAIL_HOST: {{ .Values.django.email.host | quote }}
+  EMAIL_PORT: {{ .Values.django.email.port | quote }}
+  EMAIL_USER: {{ .Values.django.email.user | quote }}
+  EMAIL_USE_TLS: {{ .Values.django.email.useTLS | quote }}
+  {{- end }}
+  
+  # Cache configuration
+  {{- if .Values.django.cache.backend }}
+  CACHE_BACKEND: {{ .Values.django.cache.backend | quote }}
+  CACHE_LOCATION: {{ .Values.django.cache.location | quote }}
+  {{- end }}
+  
+  # Celery configuration
+  {{- if .Values.django.celery.enabled }}
+  CELERY_BROKER_URL: {{ .Values.django.celery.broker | quote }}
+  CELERY_RESULT_BACKEND: {{ .Values.django.celery.backend | quote }}
+  {{- end }}
+  
+  # Application configuration
+  APP_NAME: {{ .Values.app.name | quote }}
+  APP_VERSION: {{ .Values.app.version | quote }}
+  
+  # Python configuration
+  PYTHONPATH: "/app"
+  PYTHONUNBUFFERED: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+  
+  # Additional environment variables
+  {{- range $key, $value := .Values.env }}
+  {{- if not (has $key (list "DJANGO_SECRET_KEY" "DB_PASSWORD" "EMAIL_PASSWORD")) }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}

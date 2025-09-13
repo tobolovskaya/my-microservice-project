@@ -1,0 +1,242 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "django-app.fullname" . }}
+  labels:
+    {{- include "django-app.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "django-app.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "django-app.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "django-app.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      
+      {{- if .Values.initContainers }}
+      initContainers:
+        {{- toYaml .Values.initContainers | nindent 8 }}
+      {{- end }}
+      
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ include "django-app.image" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          
+          {{- if .Values.healthChecks.enabled }}
+          livenessProbe:
+            {{- toYaml .Values.healthChecks.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.healthChecks.readinessProbe | nindent 12 }}
+          {{- end }}
+          
+          env:
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            
+            # Secret environment variables
+            {{- if .Values.secrets.djangoSecretKey }}
+            - name: DJANGO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "django-app.fullname" . }}-secrets
+                  key: django-secret-key
+            {{- end }}
+            
+            {{- if .Values.secrets.dbPassword }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "django-app.fullname" . }}-secrets
+                  key: db-password
+            {{- end }}
+            
+            {{- if .Values.secrets.emailPassword }}
+            - name: EMAIL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "django-app.fullname" . }}-secrets
+                  key: email-password
+            {{- end }}
+          
+          envFrom:
+            - configMapRef:
+                name: {{ include "django-app.fullname" . }}-config
+          
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          
+          volumeMounts:
+            {{- if .Values.persistence.enabled }}
+            - name: media-storage
+              mountPath: {{ .Values.persistence.mountPath }}
+            {{- end }}
+            
+            {{- if .Values.django.staticFiles.enabled }}
+            - name: static-files
+              mountPath: {{ .Values.django.staticFiles.root }}
+            {{- end }}
+            
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        
+        {{- if .Values.sidecars }}
+        {{- toYaml .Values.sidecars | nindent 8 }}
+        {{- end }}
+      
+      volumes:
+        {{- if .Values.persistence.enabled }}
+        - name: media-storage
+          persistentVolumeClaim:
+            claimName: {{ include "django-app.fullname" . }}-media
+        {{- end }}
+        
+        {{- if .Values.django.staticFiles.enabled }}
+        - name: static-files
+          emptyDir: {}
+        {{- end }}
+        
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+---
+{{- if .Values.migration.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "django-app.fullname" . }}-migrate
+  labels:
+    {{- include "django-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.migration.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "django-app.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: {{ .Values.migration.restartPolicy }}
+      containers:
+        - name: migrate
+          image: "{{ include "django-app.migrationImage" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: {{ .Values.migration.command }}
+          env:
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "django-app.fullname" . }}-config
+          {{- if or .Values.secrets.djangoSecretKey .Values.secrets.dbPassword }}
+          env:
+            {{- if .Values.secrets.djangoSecretKey }}
+            - name: DJANGO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "django-app.fullname" . }}-secrets
+                  key: django-secret-key
+            {{- end }}
+            {{- if .Values.secrets.dbPassword }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "django-app.fullname" . }}-secrets
+                  key: db-password
+            {{- end }}
+          {{- end }}
+{{- end }}
+
+---
+{{- if .Values.collectstatic.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "django-app.fullname" . }}-collectstatic
+  labels:
+    {{- include "django-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: collectstatic
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-4"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.collectstatic.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "django-app.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: collectstatic
+    spec:
+      restartPolicy: {{ .Values.collectstatic.restartPolicy }}
+      containers:
+        - name: collectstatic
+          image: "{{ include "django-app.collectstaticImage" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: {{ .Values.collectstatic.command }}
+          env:
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "django-app.fullname" . }}-config
+          volumeMounts:
+            - name: static-files
+              mountPath: {{ .Values.django.staticFiles.root }}
+      volumes:
+        - name: static-files
+          emptyDir: {}
+{{- end }}

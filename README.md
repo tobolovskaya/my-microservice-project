@@ -805,6 +805,27 @@ terraform apply
 
 ## 🐳 Робота з ECR
 
+### Django Application Deployment
+
+```bash
+# Deploy Django app using Helm chart
+helm install my-django-app ./charts/django-app \
+  --set image.repository=123456789012.dkr.ecr.us-west-2.amazonaws.com/django-app \
+  --set image.tag=v1.0.0 \
+  --set ingress.enabled=true \
+  --set ingress.hosts[0].host=django-app.yourdomain.com \
+  --set secrets.djangoSecretKey=your-secret-key \
+  --set secrets.dbPassword=your-db-password
+
+# Upgrade deployment
+helm upgrade my-django-app ./charts/django-app \
+  --set image.tag=v1.1.0
+
+# Check deployment status
+kubectl get pods -l app.kubernetes.io/name=django-app
+kubectl logs -l app.kubernetes.io/name=django-app
+```
+
 ### Завантаження образів
 
 ```bash

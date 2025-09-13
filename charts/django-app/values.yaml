@@ -1,0 +1,261 @@
+# Default values for django-app
+# This is a YAML-formatted file.
+
+# Global settings
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
+
+# Image configuration
+image:
+  registry: ""
+  repository: django-app
+  tag: "latest"
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# Application configuration
+app:
+  name: django-app
+  version: "1.0.0"
+  
+# Deployment configuration
+replicaCount: 2
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+  annotations: {}
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: django-app.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: django-app-tls
+      hosts:
+        - django-app.local
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+# Auto-scaling configuration
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Health checks
+healthChecks:
+  enabled: true
+  livenessProbe:
+    httpGet:
+      path: /health/
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /ready/
+      port: 8000
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# Django-specific configuration
+django:
+  # Django settings
+  settings:
+    module: "core.settings"
+    debug: false
+    allowedHosts: "*"
+    secretKey: ""  # Should be provided via secret
+    
+  # Database configuration
+  database:
+    engine: "django.db.backends.postgresql"
+    name: "django_db"
+    user: "django_user"
+    password: ""  # Should be provided via secret
+    host: "postgresql"
+    port: "5432"
+    
+  # Static files
+  staticFiles:
+    enabled: true
+    url: "/static/"
+    root: "/app/staticfiles"
+    
+  # Media files
+  mediaFiles:
+    enabled: true
+    url: "/media/"
+    root: "/app/media"
+    
+  # Email configuration
+  email:
+    backend: "django.core.mail.backends.smtp.EmailBackend"
+    host: ""
+    port: 587
+    user: ""
+    password: ""
+    useTLS: true
+    
+  # Cache configuration
+  cache:
+    backend: "django.core.cache.backends.redis.RedisCache"
+    location: "redis://redis:6379/1"
+    
+  # Celery configuration (if using)
+  celery:
+    enabled: false
+    broker: "redis://redis:6379/0"
+    backend: "redis://redis:6379/0"
+
+# Environment variables
+env:
+  # Django environment variables
+  DJANGO_SETTINGS_MODULE: "core.settings"
+  DJANGO_DEBUG: "False"
+  DJANGO_ALLOWED_HOSTS: "*"
+  
+  # Database environment variables
+  DB_ENGINE: "django.db.backends.postgresql"
+  DB_NAME: "django_db"
+  DB_USER: "django_user"
+  DB_HOST: "postgresql"
+  DB_PORT: "5432"
+  
+  # Additional environment variables
+  PYTHONPATH: "/app"
+  PYTHONUNBUFFERED: "1"
+  
+# Secrets (should be provided externally)
+secrets:
+  # Django secret key
+  djangoSecretKey: ""
+  
+  # Database password
+  dbPassword: ""
+  
+  # Email password
+  emailPassword: ""
+
+# Persistent storage
+persistence:
+  enabled: false
+  storageClass: "gp3"
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  mountPath: /app/media
+  annotations: {}
+
+# Security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 1000
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod annotations and labels
+podAnnotations: {}
+podLabels: {}
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Init containers
+initContainers: []
+
+# Sidecar containers
+sidecars: []
+
+# Additional volumes
+extraVolumes: []
+
+# Additional volume mounts
+extraVolumeMounts: []
+
+# Migration job
+migration:
+  enabled: true
+  image:
+    repository: ""  # Uses main image if empty
+    tag: ""         # Uses main tag if empty
+  command: ["python", "manage.py", "migrate"]
+  restartPolicy: Never
+  backoffLimit: 3
+
+# Collect static job
+collectstatic:
+  enabled: true
+  image:
+    repository: ""  # Uses main image if empty
+    tag: ""         # Uses main tag if empty
+  command: ["python", "manage.py", "collectstatic", "--noinput"]
+  restartPolicy: Never
+  backoffLimit: 3
+
+# Network policy
+networkPolicy:
+  enabled: false
+  ingress: []
+  egress: []
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  maxUnavailable: ""
+
+# Monitoring
+monitoring:
+  enabled: false
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    path: /metrics
+    port: metrics
