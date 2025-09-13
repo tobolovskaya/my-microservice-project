@@ -1,0 +1,95 @@
+{{- range .Values.projects }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: {{ .name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .name }}-project
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    app.kubernetes.io/part-of: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  {{- if .description }}
+  description: {{ .description }}
+  {{- end }}
+  
+  sourceRepos:
+    {{- if .sourceRepos }}
+    {{- toYaml .sourceRepos | nindent 4 }}
+    {{- else }}
+    - "*"
+    {{- end }}
+  
+  destinations:
+    {{- if .destinations }}
+    {{- range .destinations }}
+    - namespace: {{ .namespace }}
+      server: {{ .server | default "https://kubernetes.default.svc" }}
+    {{- end }}
+    {{- else }}
+    - namespace: "*"
+      server: "https://kubernetes.default.svc"
+    {{- end }}
+  
+  {{- if .clusterResourceWhitelist }}
+  clusterResourceWhitelist:
+    {{- toYaml .clusterResourceWhitelist | nindent 4 }}
+  {{- else }}
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  {{- end }}
+  
+  {{- if .namespaceResourceWhitelist }}
+  namespaceResourceWhitelist:
+    {{- toYaml .namespaceResourceWhitelist | nindent 4 }}
+  {{- else }}
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  {{- end }}
+  
+  {{- if .roles }}
+  roles:
+    {{- range .roles }}
+    - name: {{ .name }}
+      {{- if .description }}
+      description: {{ .description }}
+      {{- end }}
+      policies:
+        {{- toYaml .policies | nindent 8 }}
+      {{- if .groups }}
+      groups:
+        {{- toYaml .groups | nindent 8 }}
+      {{- end }}
+      {{- if .jwtTokens }}
+      jwtTokens:
+        {{- toYaml .jwtTokens | nindent 8 }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+  
+  {{- if .syncWindows }}
+  syncWindows:
+    {{- toYaml .syncWindows | nindent 4 }}
+  {{- end }}
+  
+  {{- if .namespaceResourceBlacklist }}
+  namespaceResourceBlacklist:
+    {{- toYaml .namespaceResourceBlacklist | nindent 4 }}
+  {{- end }}
+  
+  {{- if .clusterResourceBlacklist }}
+  clusterResourceBlacklist:
+    {{- toYaml .clusterResourceBlacklist | nindent 4 }}
+  {{- end }}
+  
+  {{- if .orphanedResources }}
+  orphanedResources:
+    {{- toYaml .orphanedResources | nindent 4 }}
+  {{- end }}
+{{- end }}

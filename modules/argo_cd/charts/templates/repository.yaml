@@ -1,0 +1,47 @@
+{{- range .Values.repositories }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .name | default (regexReplaceAll "[^a-zA-Z0-9-]" .url "-") }}-repo
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    argocd.argoproj.io/secret-type: repository
+    app.kubernetes.io/name: {{ .name | default (regexReplaceAll "[^a-zA-Z0-9-]" .url "-") }}-repo
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    app.kubernetes.io/part-of: argocd
+type: Opaque
+stringData:
+  type: {{ .type | default "git" }}
+  url: {{ .url }}
+  {{- if .name }}
+  name: {{ .name }}
+  {{- end }}
+  {{- if .credentials }}
+  {{- if .credentials.username }}
+  username: {{ .credentials.username }}
+  {{- end }}
+  {{- if .credentials.password }}
+  password: {{ .credentials.password }}
+  {{- end }}
+  {{- if .credentials.sshPrivateKey }}
+  sshPrivateKey: |
+    {{- .credentials.sshPrivateKey | nindent 4 }}
+  {{- end }}
+  {{- if .credentials.tlsClientCertData }}
+  tlsClientCertData: |
+    {{- .credentials.tlsClientCertData | nindent 4 }}
+  {{- end }}
+  {{- if .credentials.tlsClientCertKey }}
+  tlsClientCertKey: |
+    {{- .credentials.tlsClientCertKey | nindent 4 }}
+  {{- end }}
+  {{- if .credentials.insecure }}
+  insecure: "{{ .credentials.insecure }}"
+  {{- end }}
+  {{- if .credentials.enableLfs }}
+  enableLfs: "{{ .credentials.enableLfs }}"
+  {{- end }}
+  {{- end }}
+{{- end }}

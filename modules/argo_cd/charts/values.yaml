@@ -1,0 +1,104 @@
+# Default values for argocd-apps chart
+# This file contains default values for Argo CD Applications and Repositories
+
+# Applications to be created
+applications: []
+  # - name: my-app
+  #   namespace: my-app
+  #   project: default
+  #   source:
+  #     repoURL: https://github.com/company/k8s-manifests
+  #     targetRevision: HEAD
+  #     path: apps/my-app
+  #     helm:
+  #       valueFiles:
+  #         - values.yaml
+  #         - values-prod.yaml
+  #   destination:
+  #     server: https://kubernetes.default.svc
+  #     namespace: my-app
+  #   syncPolicy:
+  #     automated:
+  #       prune: true
+  #       selfHeal: true
+  #     syncOptions:
+  #       - CreateNamespace=true
+  #       - PrunePropagationPolicy=foreground
+  #   ignoreDifferences:
+  #     - group: apps
+  #       kind: Deployment
+  #       jsonPointers:
+  #         - /spec/replicas
+
+# Git repositories to be configured
+repositories: []
+  # - url: https://github.com/company/k8s-manifests
+  #   name: k8s-manifests
+  #   type: git
+  #   credentials:
+  #     username: git-user
+  #     password: git-token
+  # - url: https://charts.bitnami.com/bitnami
+  #   name: bitnami
+  #   type: helm
+
+# AppProjects to be created
+projects: []
+  # - name: production
+  #   description: Production applications
+  #   sourceRepos:
+  #     - https://github.com/company/k8s-manifests
+  #     - https://charts.bitnami.com/bitnami
+  #   destinations:
+  #     - namespace: production
+  #       server: https://kubernetes.default.svc
+  #     - namespace: staging
+  #       server: https://kubernetes.default.svc
+  #   clusterResourceWhitelist:
+  #     - group: ""
+  #       kind: Namespace
+  #     - group: rbac.authorization.k8s.io
+  #       kind: ClusterRole
+  #   namespaceResourceWhitelist:
+  #     - group: ""
+  #       kind: "*"
+  #     - group: apps
+  #       kind: "*"
+  #     - group: networking.k8s.io
+  #       kind: "*"
+  #   roles:
+  #     - name: admin
+  #       policies:
+  #         - "p, proj:production:admin, applications, *, production/*, allow"
+  #         - "p, proj:production:admin, repositories, *, *, allow"
+  #       groups:
+  #         - company:production-admins
+  #     - name: developer
+  #       policies:
+  #         - "p, proj:production:developer, applications, get, production/*, allow"
+  #         - "p, proj:production:developer, applications, sync, production/*, allow"
+  #       groups:
+  #         - company:developers
+
+# Global settings
+global:
+  # Default project for applications
+  defaultProject: default
+  
+  # Default sync policy
+  defaultSyncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+  
+  # Default destination
+  defaultDestination:
+    server: https://kubernetes.default.svc
+  
+  # Default source settings
+  defaultSource:
+    targetRevision: HEAD

@@ -1,0 +1,102 @@
+{{- range .Values.applications }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    app.kubernetes.io/part-of: argocd
+  {{- if .finalizers }}
+  finalizers:
+    {{- toYaml .finalizers | nindent 4 }}
+  {{- else }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  {{- end }}
+  {{- if .annotations }}
+  annotations:
+    {{- toYaml .annotations | nindent 4 }}
+  {{- end }}
+spec:
+  project: {{ .project | default "default" }}
+  
+  source:
+    repoURL: {{ .source.repoURL }}
+    targetRevision: {{ .source.targetRevision | default "HEAD" }}
+    path: {{ .source.path | default "." }}
+    {{- if .source.helm }}
+    helm:
+      {{- if .source.helm.valueFiles }}
+      valueFiles:
+        {{- toYaml .source.helm.valueFiles | nindent 8 }}
+      {{- end }}
+      {{- if .source.helm.values }}
+      values: |
+        {{- .source.helm.values | nindent 8 }}
+      {{- end }}
+      {{- if .source.helm.parameters }}
+      parameters:
+        {{- toYaml .source.helm.parameters | nindent 8 }}
+      {{- end }}
+      {{- if .source.helm.releaseName }}
+      releaseName: {{ .source.helm.releaseName }}
+      {{- end }}
+    {{- end }}
+    {{- if .source.kustomize }}
+    kustomize:
+      {{- toYaml .source.kustomize | nindent 6 }}
+    {{- end }}
+    {{- if .source.directory }}
+    directory:
+      {{- toYaml .source.directory | nindent 6 }}
+    {{- end }}
+  
+  destination:
+    server: {{ .destination.server | default "https://kubernetes.default.svc" }}
+    namespace: {{ .destination.namespace }}
+  
+  {{- if .syncPolicy }}
+  syncPolicy:
+    {{- if .syncPolicy.automated }}
+    automated:
+      prune: {{ .syncPolicy.automated.prune | default true }}
+      selfHeal: {{ .syncPolicy.automated.selfHeal | default true }}
+      {{- if .syncPolicy.automated.allowEmpty }}
+      allowEmpty: {{ .syncPolicy.automated.allowEmpty }}
+      {{- end }}
+    {{- end }}
+    {{- if .syncPolicy.syncOptions }}
+    syncOptions:
+      {{- toYaml .syncPolicy.syncOptions | nindent 6 }}
+    {{- end }}
+    {{- if .syncPolicy.retry }}
+    retry:
+      {{- toYaml .syncPolicy.retry | nindent 6 }}
+    {{- end }}
+  {{- else }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+  {{- end }}
+  
+  {{- if .ignoreDifferences }}
+  ignoreDifferences:
+    {{- toYaml .ignoreDifferences | nindent 4 }}
+  {{- end }}
+  
+  {{- if .info }}
+  info:
+    {{- toYaml .info | nindent 4 }}
+  {{- end }}
+  
+  {{- if .revisionHistoryLimit }}
+  revisionHistoryLimit: {{ .revisionHistoryLimit }}
+  {{- end }}
+{{- end }}

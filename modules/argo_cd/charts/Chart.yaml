@@ -1,0 +1,20 @@
+apiVersion: v2
+name: argocd-apps
+description: Helm chart for managing Argo CD Applications and Repositories
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - argocd
+  - gitops
+  - applications
+  - kubernetes
+home: https://argoproj.github.io/argo-cd/
+sources:
+  - https://github.com/argoproj/argo-cd
+maintainers:
+  - name: DevOps Team
+    email: devops@company.com
+annotations:
+  category: GitOps
+  licenses: Apache-2.0
