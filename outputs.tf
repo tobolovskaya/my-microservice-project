@@ -109,3 +109,40 @@ output "ecr_login_command" {
   description = "Команда для логіну в ECR"
   value       = module.ecr.ecr_login_command
 }
+
+# Jenkins виводи
+output "jenkins_url" {
+  description = "URL для доступу до Jenkins"
+  value       = module.jenkins.jenkins_url
+}
+
+output "jenkins_admin_user" {
+  description = "Ім'я адміністратора Jenkins"
+  value       = module.jenkins.jenkins_admin_user
+}
+
+output "jenkins_admin_password" {
+  description = "Пароль адміністратора Jenkins"
+  value       = module.jenkins.jenkins_admin_password
+  sensitive   = true
+}
+
+output "jenkins_namespace" {
+  description = "Kubernetes namespace Jenkins"
+  value       = module.jenkins.jenkins_namespace
+}
+
+output "kubectl_port_forward_command" {
+  description = "Команда для port-forward до Jenkins"
+  value       = module.jenkins.kubectl_port_forward_command
+}
+
+output "jenkins_webhook_url" {
+  description = "URL для GitHub/GitLab webhooks"
+  value       = module.jenkins.jenkins_webhook_url
+}
+
+output "jenkins_api_url" {
+  description = "URL для Jenkins API"
+  value       = module.jenkins.jenkins_api_url
+}

@@ -74,3 +74,74 @@ common_tags = {
   ManagedBy   = "terraform"
   Owner       = "your-name"
 }
+
+# Jenkins налаштування
+jenkins_release_name = "jenkins"
+jenkins_namespace = "jenkins"
+jenkins_helm_chart_version = "4.8.3"
+jenkins_admin_user = "admin"
+jenkins_admin_password = "your-secure-jenkins-password"  # ЗМІНІТЬ НА БЕЗПЕЧНИЙ ПАРОЛЬ!
+
+# Jenkins ресурси
+jenkins_resources = {
+  requests = {
+    cpu    = "500m"
+    memory = "1Gi"
+  }
+  limits = {
+    cpu    = "2"
+    memory = "4Gi"
+  }
+}
+
+# Jenkins сховище
+jenkins_persistence_enabled = true
+jenkins_storage_size = "20Gi"
+jenkins_storage_class = "gp3"
+jenkins_create_pvc = true
+
+# Jenkins мережа
+jenkins_service_type = "ClusterIP"
+jenkins_create_load_balancer_service = false
+jenkins_ingress_enabled = true
+jenkins_ingress_hostname = "jenkins.yourdomain.com"  # ЗМІНІТЬ НА ВАШ ДОМЕН!
+jenkins_ingress_class_name = "nginx"
+jenkins_ingress_tls_enabled = true
+jenkins_ingress_tls_secret_name = "jenkins-tls"
+
+# Jenkins плагіни
+jenkins_install_plugins = [
+  "kubernetes:4029.v5712230ccb_f8",
+  "workflow-aggregator:596.v8c21c963d92d",
+  "git:5.0.0",
+  "configuration-as-code:1670.v564dc8b_982d0",
+  "blueocean:1.27.2",
+  "docker-workflow:563.vd5d2e5c4007f",
+  "aws-credentials:191.vcb_f183ce58b_9",
+  "amazon-ecr:1.7.3",
+  "github:1.37.3.1",
+  "slack:631.v40deea_40323b"
+]
+
+# Jenkins автоскейлінг
+jenkins_enable_hpa = false
+jenkins_hpa_min_replicas = 1
+jenkins_hpa_max_replicas = 3
+jenkins_hpa_target_cpu_utilization = 70
+jenkins_hpa_target_memory_utilization = 80
+
+# Jenkins моніторинг
+jenkins_enable_prometheus_monitoring = true
+jenkins_prometheus_scrape_interval = "30s"
+
+# Jenkins backup
+jenkins_enable_backup = false
+jenkins_backup_schedule = "0 2 * * *"
+jenkins_backup_retention_days = 30
+
+# Jenkins додаткові налаштування
+jenkins_timezone = "Europe/Kiev"
+jenkins_java_opts = "-Xmx2g -Xms1g"
+jenkins_enable_csrf_protection = true
+jenkins_enable_script_security = true
+jenkins_agent_connection_timeout = 100

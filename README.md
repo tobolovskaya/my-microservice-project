@@ -48,6 +48,12 @@ Project/
         ├── ecr.tf          # Створення ECR репозиторію
         ├── variables.tf    # Змінні для ECR
         └── outputs.tf      # Виведення URL репозиторію
+    └── jenkins/            # Модуль для Jenkins CI/CD
+        ├── jenkins.tf      # Helm release для Jenkins
+        ├── variables.tf    # Змінні для Jenkins
+        ├── providers.tf    # Провайдери (Kubernetes, Helm)
+        ├── values.yaml     # Конфігурація Jenkins
+        └── outputs.tf      # Виводи (URL, креденшели)
 ```
 
 ## 🚀 Швидкий старт
@@ -98,6 +104,10 @@ db_password = "your-secure-password"
 eks_cluster_name = "my-cluster"
 kubernetes_version = "1.28"
 
+# Jenkins налаштування
+jenkins_admin_password = "secure-password"
+jenkins_ingress_hostname = "jenkins.yourdomain.com"
+
 # Теги
 common_tags = {
   Environment = "dev"
@@ -122,6 +132,19 @@ aws eks update-kubeconfig --region us-west-2 --name my-cluster
 
 # Перевірка підключення
 kubectl get nodes
+```
+
+### 6. Доступ до Jenkins
+
+```bash
+# Отримання URL Jenkins
+terraform output jenkins_url
+
+# Port-forward для локального доступу
+terraform output kubectl_port_forward_command
+
+# Отримання пароля адміністратора
+terraform output jenkins_admin_password
 ```
 
 ### 5. Завантаження образів в ECR
@@ -252,6 +275,73 @@ module "ecr" {
   tags = {
     Environment = "production"
     Project     = "my-app"
+  }
+}
+```
+
+### Jenkins CI/CD платформа
+
+```hcl
+module "jenkins" {
+  source = "./modules/jenkins"
+  
+  # Основні параметри
+  release_name = "jenkins"
+  namespace    = "jenkins"
+  
+  # Креденшели
+  admin_user     = "admin"
+  admin_password = "secure-password-here"
+  
+  # Ресурси
+  resources = {
+    requests = {
+      cpu    = "1"
+      memory = "2Gi"
+    }
+    limits = {
+      cpu    = "4"
+      memory = "8Gi"
+    }
+  }
+  
+  # Сховище
+  persistence_enabled = true
+  storage_size       = "50Gi"
+  storage_class      = "gp3"
+  
+  # Ingress
+  ingress_enabled     = true
+  ingress_hostname    = "jenkins.company.com"
+  ingress_tls_enabled = true
+  
+  # AWS інтеграція
+  aws_region       = "us-west-2"
+  ecr_registry_url = module.ecr.repository_url
+  
+  # Плагіни
+  install_plugins = [
+    "kubernetes:latest",
+    "workflow-aggregator:latest",
+    "git:latest",
+    "docker-workflow:latest",
+    "aws-credentials:latest",
+    "amazon-ecr:latest",
+    "github:latest",
+    "slack:latest"
+  ]
+  
+  # Моніторинг
+  enable_prometheus_monitoring = true
+  
+  # Backup
+  enable_backup         = true
+  backup_schedule       = "0 2 * * *"
+  backup_retention_days = 90
+  
+  tags = {
+    Environment = "production"
+    Project     = "ci-cd"
   }
 }
 ```
@@ -537,6 +627,17 @@ module "mysql_rds" {
 | `ecr_login_command` | Команда для логіну в ECR |
 | `ecr_login_command` | Команда для логіну в ECR |
 
+### Jenkins виводи
+
+| Вивід | Опис |
+|-------|------|
+| `jenkins_url` | URL для доступу до Jenkins |
+| `jenkins_admin_user` | Ім'я адміністратора |
+| `jenkins_admin_password` | Пароль адміністратора (sensitive) |
+| `kubectl_port_forward_command` | Команда для port-forward |
+| `jenkins_webhook_url` | URL для GitHub/GitLab webhooks |
+| `jenkins_api_url` | URL для Jenkins API |
+
 ### Ідентифікатори
 
 | Вивід | Опис |
@@ -615,6 +716,140 @@ docker tag my-app:latest 123456789012.dkr.ecr.us-west-2.amazonaws.com/my-app:v1.
 # Завантаження
 docker push 123456789012.dkr.ecr.us-west-2.amazonaws.com/my-app:latest
 docker push 123456789012.dkr.ecr.us-west-2.amazonaws.com/my-app:v1.0.0
+```
+
+## 🔧 Робота з Jenkins
+
+### Доступ до Jenkins
+
+```bash
+# Отримання URL
+terraform output jenkins_url
+
+# Port-forward для локального доступу
+kubectl port-forward -n jenkins svc/jenkins-jenkins 8080:8080
+
+# Відкрити в браузері
+open http://localhost:8080
+
+# Логін: admin
+# Пароль: terraform output jenkins_admin_password
+```
+
+### Налаштування GitHub Integration
+
+1. **Webhook URL**: `https://jenkins.yourdomain.com/github-webhook/`
+2. **API Token**: Створіть в Jenkins → Manage Jenkins → Configure System
+3. **Credentials**: Додайте GitHub token в Jenkins credentials
+
+### Приклад Pipeline
+
+```groovy
+pipeline {
+    agent {
+        kubernetes {
+            yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: docker
+    image: docker:latest
+    command:
+    - cat
+    tty: true
+    volumeMounts:
+    - mountPath: /var/run/docker.sock
+      name: docker-sock
+  volumes:
+  - name: docker-sock
+    hostPath:
+      path: /var/run/docker.sock
+"""
+        }
+    }
+    
+    environment {
+        ECR_REGISTRY = "${ECR_REGISTRY_URL}"
+        IMAGE_TAG = "${BUILD_NUMBER}"
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                container('docker') {
+                    script {
+                        sh 'docker build -t $ECR_REGISTRY:$IMAGE_TAG .'
+                    }
+                }
+            }
+        }
+        
+        stage('Push to ECR') {
+            steps {
+                container('docker') {
+                    script {
+                        sh '''
+                            aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin $ECR_REGISTRY
+                            docker push $ECR_REGISTRY:$IMAGE_TAG
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy') {
+            steps {
+                script {
+                    sh '''
+                        kubectl set image deployment/my-app my-app=$ECR_REGISTRY:$IMAGE_TAG
+                        kubectl rollout status deployment/my-app
+                    '''
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            slackSend(
+                color: 'good',
+                message: "✅ Build ${BUILD_NUMBER} успішно розгорнуто!"
+            )
+        }
+        failure {
+            slackSend(
+                color: 'danger',
+                message: "❌ Build ${BUILD_NUMBER} завершився з помилкою!"
+            )
+        }
+    }
+}
+```
+
+### Встановлення додаткових плагінів
+
+```bash
+# Через Jenkins UI
+Manage Jenkins → Manage Plugins → Available
+
+# Або через Configuration as Code
+# Додайте плагіни в terraform.tfvars:
+jenkins_install_plugins = [
+  "kubernetes:latest",
+  "workflow-aggregator:latest",
+  "git:latest",
+  "github:latest",
+  "slack:latest",
+  "sonar:latest",
+  "docker-workflow:latest"
+]
 ```
 
 ### Використання в Kubernetes
@@ -988,6 +1223,13 @@ aws s3 ls s3://your-terraform-state-bucket
 # Перевірка DynamoDB
 aws dynamodb describe-table --table-name terraform-state-lock
 
+# Доступ до Jenkins
+kubectl port-forward -n jenkins svc/jenkins-jenkins 8080:8080
+
+# Перевірка конфігурації
+kubectl get configmap -n jenkins
+kubectl get secret -n jenkins
+
 # Terraform
 # Перевірка стану
 terraform state list
@@ -1012,14 +1254,39 @@ kubectl describe node <node-name>
 kubectl describe pod <pod-name>
 ```
 
+### Jenkins проблеми
+
+1. **Pod не запускається**: Перевірте ресурси та PVC
+2. **Ingress не працює**: Перевірте Ingress Controller та DNS
+3. **Плагіни не встановлюються**: Перевірте інтернет-доступ з кластера
+4. **Агенти не підключаються**: Перевірте Service Account права
+
+```bash
+# Діагностика Jenkins
+kubectl describe pod -n jenkins -l app.kubernetes.io/instance=jenkins
+kubectl logs -n jenkins -l app.kubernetes.io/instance=jenkins --tail=100
+kubectl get events -n jenkins --sort-by='.lastTimestamp'
+
+# Перевірка PVC
+kubectl get pvc -n jenkins
+kubectl describe pvc -n jenkins jenkins-home-pvc
+
+# Перевірка Ingress
+kubectl get ingress -n jenkins
+kubectl describe ingress -n jenkins
+```
+
 ## 📚 Додаткові ресурси
 
 - [AWS RDS Documentation](https://docs.aws.amazon.com/rds/)
 - [AWS Aurora Documentation](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/)
 - [AWS EKS Documentation](https://docs.aws.amazon.com/eks/)
+- [Jenkins Documentation](https://www.jenkins.io/doc/)
+- [Jenkins Kubernetes Plugin](https://plugins.jenkins.io/kubernetes/)
 - [Kubernetes Documentation](https://kubernetes.io/docs/)
 - [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 - [EKS Best Practices](https://aws.github.io/aws-eks-best-practices/)
+- [Helm Charts](https://helm.sh/docs/)
 
 ## 🤝 Внесок
 

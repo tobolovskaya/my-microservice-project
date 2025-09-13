@@ -103,6 +103,124 @@ module "ecr" {
   tags = var.common_tags
 }
 
+# Провайдери для Jenkins (потрібні для Helm та Kubernetes)
+provider "kubernetes" {
+  host                   = module.eks.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+  
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args = [
+      "eks",
+      "get-token",
+      "--cluster-name",
+      module.eks.cluster_name,
+      "--region",
+      var.aws_region
+    ]
+  }
+}
+
+provider "helm" {
+  kubernetes {
+    host                   = module.eks.cluster_endpoint
+    cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+    
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args = [
+        "eks",
+        "get-token",
+        "--cluster-name",
+        module.eks.cluster_name,
+        "--region",
+        var.aws_region
+      ]
+    }
+  }
+}
+
+# Модуль Jenkins
+module "jenkins" {
+  source = "./modules/jenkins"
+  
+  # Основні параметри
+  release_name = var.jenkins_release_name
+  namespace    = var.jenkins_namespace
+  
+  # Helm налаштування
+  helm_chart_version = var.jenkins_helm_chart_version
+  helm_timeout      = var.jenkins_helm_timeout
+  
+  # Jenkins конфігурація
+  admin_user     = var.jenkins_admin_user
+  admin_password = var.jenkins_admin_password
+  
+  # Ресурси
+  resources = var.jenkins_resources
+  
+  # Сховище
+  persistence_enabled = var.jenkins_persistence_enabled
+  storage_size       = var.jenkins_storage_size
+  storage_class      = var.jenkins_storage_class
+  create_pvc         = var.jenkins_create_pvc
+  
+  # Мережеві налаштування
+  service_type                    = var.jenkins_service_type
+  create_load_balancer_service    = var.jenkins_create_load_balancer_service
+  load_balancer_annotations       = var.jenkins_load_balancer_annotations
+  load_balancer_source_ranges     = var.jenkins_load_balancer_source_ranges
+  
+  # Ingress
+  ingress_enabled        = var.jenkins_ingress_enabled
+  create_custom_ingress  = var.jenkins_create_custom_ingress
+  ingress_hostname       = var.jenkins_ingress_hostname
+  ingress_class_name     = var.jenkins_ingress_class_name
+  ingress_annotations    = var.jenkins_ingress_annotations
+  ingress_tls_enabled    = var.jenkins_ingress_tls_enabled
+  ingress_tls_secret_name = var.jenkins_ingress_tls_secret_name
+  
+  # Plugins
+  install_plugins = var.jenkins_install_plugins
+  
+  # AWS інтеграція
+  aws_region        = var.aws_region
+  ecr_registry_url  = module.ecr.repository_url
+  
+  # Auto Scaling
+  enable_hpa                      = var.jenkins_enable_hpa
+  hpa_min_replicas               = var.jenkins_hpa_min_replicas
+  hpa_max_replicas               = var.jenkins_hpa_max_replicas
+  hpa_target_cpu_utilization     = var.jenkins_hpa_target_cpu_utilization
+  hpa_target_memory_utilization  = var.jenkins_hpa_target_memory_utilization
+  
+  # Моніторинг
+  enable_prometheus_monitoring = var.jenkins_enable_prometheus_monitoring
+  prometheus_scrape_interval   = var.jenkins_prometheus_scrape_interval
+  
+  # Backup
+  enable_backup           = var.jenkins_enable_backup
+  backup_schedule         = var.jenkins_backup_schedule
+  backup_retention_days   = var.jenkins_backup_retention_days
+  
+  # Додаткові налаштування
+  timezone                    = var.jenkins_timezone
+  java_opts                   = var.jenkins_java_opts
+  jenkins_opts                = var.jenkins_jenkins_opts
+  enable_csrf_protection      = var.jenkins_enable_csrf_protection
+  enable_script_security      = var.jenkins_enable_script_security
+  agent_connection_timeout    = var.jenkins_agent_connection_timeout
+  
+  tags = var.common_tags
+  
+  depends_on = [
+    module.eks,
+    module.ecr
+  ]
+}
+
 # Змінні
 variable "aws_region" {
   description = "AWS регіон"
@@ -326,6 +444,272 @@ variable "ecr_cross_account_arns" {
   description = "ARN акаунтів для міжакаунтного доступу"
   type        = list(string)
   default     = []
+}
+
+# Jenkins змінні
+variable "jenkins_release_name" {
+  description = "Назва Helm release для Jenkins"
+  type        = string
+  default     = "jenkins"
+}
+
+variable "jenkins_namespace" {
+  description = "Kubernetes namespace для Jenkins"
+  type        = string
+  default     = "jenkins"
+}
+
+variable "jenkins_helm_chart_version" {
+  description = "Версія Helm chart для Jenkins"
+  type        = string
+  default     = "4.8.3"
+}
+
+variable "jenkins_helm_timeout" {
+  description = "Timeout для Helm операцій"
+  type        = number
+  default     = 600
+}
+
+variable "jenkins_admin_user" {
+  description = "Ім'я адміністратора Jenkins"
+  type        = string
+  default     = "admin"
+}
+
+variable "jenkins_admin_password" {
+  description = "Пароль адміністратора Jenkins"
+  type        = string
+  sensitive   = true
+}
+
+variable "jenkins_resources" {
+  description = "Ресурси для Jenkins controller"
+  type = object({
+    requests = object({
+      cpu    = string
+      memory = string
+    })
+    limits = object({
+      cpu    = string
+      memory = string
+    })
+  })
+  default = {
+    requests = {
+      cpu    = "500m"
+      memory = "1Gi"
+    }
+    limits = {
+      cpu    = "2"
+      memory = "4Gi"
+    }
+  }
+}
+
+variable "jenkins_persistence_enabled" {
+  description = "Увімкнути persistent storage для Jenkins"
+  type        = bool
+  default     = true
+}
+
+variable "jenkins_storage_size" {
+  description = "Розмір сховища для Jenkins"
+  type        = string
+  default     = "20Gi"
+}
+
+variable "jenkins_storage_class" {
+  description = "Storage class для Jenkins"
+  type        = string
+  default     = "gp3"
+}
+
+variable "jenkins_create_pvc" {
+  description = "Створити PVC для Jenkins"
+  type        = bool
+  default     = true
+}
+
+variable "jenkins_service_type" {
+  description = "Тип Kubernetes service для Jenkins"
+  type        = string
+  default     = "ClusterIP"
+}
+
+variable "jenkins_create_load_balancer_service" {
+  description = "Створити LoadBalancer service"
+  type        = bool
+  default     = false
+}
+
+variable "jenkins_load_balancer_annotations" {
+  description = "Анотації для LoadBalancer service"
+  type        = map(string)
+  default = {
+    "service.beta.kubernetes.io/aws-load-balancer-type" = "nlb"
+  }
+}
+
+variable "jenkins_load_balancer_source_ranges" {
+  description = "CIDR блоки для LoadBalancer"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "jenkins_ingress_enabled" {
+  description = "Увімкнути Ingress для Jenkins"
+  type        = bool
+  default     = true
+}
+
+variable "jenkins_create_custom_ingress" {
+  description = "Створити кастомний Ingress"
+  type        = bool
+  default     = false
+}
+
+variable "jenkins_ingress_hostname" {
+  description = "Hostname для Jenkins Ingress"
+  type        = string
+  default     = "jenkins.local"
+}
+
+variable "jenkins_ingress_class_name" {
+  description = "Ingress class name"
+  type        = string
+  default     = "nginx"
+}
+
+variable "jenkins_ingress_annotations" {
+  description = "Анотації для Ingress"
+  type        = map(string)
+  default = {
+    "cert-manager.io/cluster-issuer" = "letsencrypt-prod"
+  }
+}
+
+variable "jenkins_ingress_tls_enabled" {
+  description = "Увімкнути TLS для Ingress"
+  type        = bool
+  default     = true
+}
+
+variable "jenkins_ingress_tls_secret_name" {
+  description = "Назва TLS secret"
+  type        = string
+  default     = "jenkins-tls"
+}
+
+variable "jenkins_install_plugins" {
+  description = "Список плагінів для Jenkins"
+  type        = list(string)
+  default = [
+    "kubernetes:4029.v5712230ccb_f8",
+    "workflow-aggregator:596.v8c21c963d92d",
+    "git:5.0.0",
+    "configuration-as-code:1670.v564dc8b_982d0",
+    "blueocean:1.27.2",
+    "docker-workflow:563.vd5d2e5c4007f",
+    "aws-credentials:191.vcb_f183ce58b_9",
+    "amazon-ecr:1.7.3"
+  ]
+}
+
+variable "jenkins_enable_hpa" {
+  description = "Увімкнути HorizontalPodAutoscaler"
+  type        = bool
+  default     = false
+}
+
+variable "jenkins_hpa_min_replicas" {
+  description = "Мінімальна кількість реплік HPA"
+  type        = number
+  default     = 1
+}
+
+variable "jenkins_hpa_max_replicas" {
+  description = "Максимальна кількість реплік HPA"
+  type        = number
+  default     = 3
+}
+
+variable "jenkins_hpa_target_cpu_utilization" {
+  description = "Цільова утилізація CPU для HPA"
+  type        = number
+  default     = 70
+}
+
+variable "jenkins_hpa_target_memory_utilization" {
+  description = "Цільова утилізація пам'яті для HPA"
+  type        = number
+  default     = 80
+}
+
+variable "jenkins_enable_prometheus_monitoring" {
+  description = "Увімкнути Prometheus моніторинг"
+  type        = bool
+  default     = true
+}
+
+variable "jenkins_prometheus_scrape_interval" {
+  description = "Інтервал збору метрик Prometheus"
+  type        = string
+  default     = "30s"
+}
+
+variable "jenkins_enable_backup" {
+  description = "Увімкнути автоматичне резервне копіювання"
+  type        = bool
+  default     = false
+}
+
+variable "jenkins_backup_schedule" {
+  description = "Cron розклад для резервного копіювання"
+  type        = string
+  default     = "0 2 * * *"
+}
+
+variable "jenkins_backup_retention_days" {
+  description = "Кількість днів зберігання резервних копій"
+  type        = number
+  default     = 30
+}
+
+variable "jenkins_timezone" {
+  description = "Часовий пояс для Jenkins"
+  type        = string
+  default     = "UTC"
+}
+
+variable "jenkins_java_opts" {
+  description = "Java опції для Jenkins"
+  type        = string
+  default     = "-Xmx2g -Xms1g"
+}
+
+variable "jenkins_jenkins_opts" {
+  description = "Jenkins опції"
+  type        = string
+  default     = ""
+}
+
+variable "jenkins_enable_csrf_protection" {
+  description = "Увімкнути CSRF захист"
+  type        = bool
+  default     = true
+}
+
+variable "jenkins_enable_script_security" {
+  description = "Увімкнути script security"
+  type        = bool
+  default     = true
+}
+
+variable "jenkins_agent_connection_timeout" {
+  description = "Timeout для підключення агентів"
+  type        = number
+  default     = 100
 }
 
 variable "common_tags" {
