@@ -221,6 +221,103 @@ module "jenkins" {
   ]
 }
 
+# Модуль Argo CD
+module "argocd" {
+  source = "./modules/argo_cd"
+  
+  # Основні параметри
+  release_name = var.argocd_release_name
+  namespace    = var.argocd_namespace
+  
+  # Helm налаштування
+  helm_chart_version = var.argocd_helm_chart_version
+  helm_timeout      = var.argocd_helm_timeout
+  
+  # Argo CD конфігурація
+  admin_password = var.argocd_admin_password
+  
+  # Ресурси
+  controller_resources  = var.argocd_controller_resources
+  server_resources     = var.argocd_server_resources
+  repo_server_resources = var.argocd_repo_server_resources
+  
+  # High Availability
+  enable_ha            = var.argocd_enable_ha
+  controller_replicas  = var.argocd_controller_replicas
+  server_replicas      = var.argocd_server_replicas
+  repo_server_replicas = var.argocd_repo_server_replicas
+  
+  # Мережеві налаштування
+  service_type                    = var.argocd_service_type
+  create_load_balancer_service    = var.argocd_create_load_balancer_service
+  load_balancer_annotations       = var.argocd_load_balancer_annotations
+  load_balancer_source_ranges     = var.argocd_load_balancer_source_ranges
+  
+  # Ingress
+  ingress_enabled        = var.argocd_ingress_enabled
+  create_custom_ingress  = var.argocd_create_custom_ingress
+  ingress_hostname       = var.argocd_ingress_hostname
+  ingress_class_name     = var.argocd_ingress_class_name
+  ingress_annotations    = var.argocd_ingress_annotations
+  ingress_tls_enabled    = var.argocd_ingress_tls_enabled
+  ingress_tls_secret_name = var.argocd_ingress_tls_secret_name
+  
+  # Функціональність
+  enable_metrics        = var.argocd_enable_metrics
+  enable_notifications  = var.argocd_enable_notifications
+  enable_applicationset = var.argocd_enable_applicationset
+  enable_dex           = var.argocd_enable_dex
+  
+  # Auto Scaling
+  enable_hpa                      = var.argocd_enable_hpa
+  hpa_min_replicas               = var.argocd_hpa_min_replicas
+  hpa_max_replicas               = var.argocd_hpa_max_replicas
+  hpa_target_cpu_utilization     = var.argocd_hpa_target_cpu_utilization
+  hpa_target_memory_utilization  = var.argocd_hpa_target_memory_utilization
+  
+  # Моніторинг
+  enable_prometheus_monitoring = var.argocd_enable_prometheus_monitoring
+  prometheus_scrape_interval   = var.argocd_prometheus_scrape_interval
+  
+  # Backup
+  enable_backup           = var.argocd_enable_backup
+  backup_schedule         = var.argocd_backup_schedule
+  backup_retention_days   = var.argocd_backup_retention_days
+  
+  # GitOps налаштування
+  create_demo_application = var.argocd_create_demo_application
+  demo_app_repo_url      = var.argocd_demo_app_repo_url
+  demo_app_target_revision = var.argocd_demo_app_target_revision
+  demo_app_path          = var.argocd_demo_app_path
+  demo_app_namespace     = var.argocd_demo_app_namespace
+  
+  # AppProject
+  create_app_project           = var.argocd_create_app_project
+  app_project_name            = var.argocd_app_project_name
+  app_project_source_repos    = var.argocd_app_project_source_repos
+  app_project_admin_groups    = var.argocd_app_project_admin_groups
+  app_project_developer_groups = var.argocd_app_project_developer_groups
+  
+  # Додаткові налаштування
+  timezone    = var.argocd_timezone
+  log_level   = var.argocd_log_level
+  log_format  = var.argocd_log_format
+  sync_timeout = var.argocd_sync_timeout
+  self_heal_timeout = var.argocd_self_heal_timeout
+  
+  # Webhooks
+  enable_webhooks       = var.argocd_enable_webhooks
+  webhook_github_secret = var.argocd_webhook_github_secret
+  webhook_gitlab_secret = var.argocd_webhook_gitlab_secret
+  
+  tags = var.common_tags
+  
+  depends_on = [
+    module.eks,
+    module.jenkins
+  ]
+}
+
 # Змінні
 variable "aws_region" {
   description = "AWS регіон"
@@ -710,6 +807,396 @@ variable "jenkins_agent_connection_timeout" {
   description = "Timeout для підключення агентів"
   type        = number
   default     = 100
+}
+
+variable "argocd_release_name" {
+  description = "Назва Helm release для Argo CD"
+  type        = string
+  default     = "argocd"
+}
+
+variable "argocd_namespace" {
+  description = "Kubernetes namespace для Argo CD"
+  type        = string
+  default     = "argocd"
+}
+
+variable "argocd_helm_chart_version" {
+  description = "Версія Helm chart для Argo CD"
+  type        = string
+  default     = "5.51.6"
+}
+
+variable "argocd_helm_timeout" {
+  description = "Timeout для Helm операцій"
+  type        = number
+  default     = 600
+}
+
+variable "argocd_admin_password" {
+  description = "Пароль адміністратора Argo CD"
+  type        = string
+  sensitive   = true
+}
+
+variable "argocd_controller_resources" {
+  description = "Ресурси для Argo CD Application Controller"
+  type = object({
+    requests = object({
+      cpu    = string
+      memory = string
+    })
+    limits = object({
+      cpu    = string
+      memory = string
+    })
+  })
+  default = {
+    requests = {
+      cpu    = "250m"
+      memory = "1Gi"
+    }
+    limits = {
+      cpu    = "500m"
+      memory = "2Gi"
+    }
+  }
+}
+
+variable "argocd_server_resources" {
+  description = "Ресурси для Argo CD Server"
+  type = object({
+    requests = object({
+      cpu    = string
+      memory = string
+    })
+    limits = object({
+      cpu    = string
+      memory = string
+    })
+  })
+  default = {
+    requests = {
+      cpu    = "100m"
+      memory = "128Mi"
+    }
+    limits = {
+      cpu    = "500m"
+      memory = "512Mi"
+    }
+  }
+}
+
+variable "argocd_repo_server_resources" {
+  description = "Ресурси для Argo CD Repo Server"
+  type = object({
+    requests = object({
+      cpu    = string
+      memory = string
+    })
+    limits = object({
+      cpu    = string
+      memory = string
+    })
+  })
+  default = {
+    requests = {
+      cpu    = "100m"
+      memory = "256Mi"
+    }
+    limits = {
+      cpu    = "1"
+      memory = "1Gi"
+    }
+  }
+}
+
+variable "argocd_enable_ha" {
+  description = "Увімкнути High Availability режим"
+  type        = bool
+  default     = false
+}
+
+variable "argocd_controller_replicas" {
+  description = "Кількість реплік Application Controller"
+  type        = number
+  default     = 1
+}
+
+variable "argocd_server_replicas" {
+  description = "Кількість реплік Server"
+  type        = number
+  default     = 2
+}
+
+variable "argocd_repo_server_replicas" {
+  description = "Кількість реплік Repo Server"
+  type        = number
+  default     = 2
+}
+
+variable "argocd_service_type" {
+  description = "Тип Kubernetes service для Argo CD"
+  type        = string
+  default     = "ClusterIP"
+}
+
+variable "argocd_create_load_balancer_service" {
+  description = "Створити LoadBalancer service"
+  type        = bool
+  default     = false
+}
+
+variable "argocd_load_balancer_annotations" {
+  description = "Анотації для LoadBalancer service"
+  type        = map(string)
+  default = {
+    "service.beta.kubernetes.io/aws-load-balancer-type" = "nlb"
+  }
+}
+
+variable "argocd_load_balancer_source_ranges" {
+  description = "CIDR блоки для LoadBalancer"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "argocd_ingress_enabled" {
+  description = "Увімкнути Ingress для Argo CD"
+  type        = bool
+  default     = true
+}
+
+variable "argocd_create_custom_ingress" {
+  description = "Створити кастомний Ingress"
+  type        = bool
+  default     = false
+}
+
+variable "argocd_ingress_hostname" {
+  description = "Hostname для Argo CD Ingress"
+  type        = string
+  default     = "argocd.local"
+}
+
+variable "argocd_ingress_class_name" {
+  description = "Ingress class name"
+  type        = string
+  default     = "nginx"
+}
+
+variable "argocd_ingress_annotations" {
+  description = "Анотації для Ingress"
+  type        = map(string)
+  default = {
+    "cert-manager.io/cluster-issuer" = "letsencrypt-prod"
+  }
+}
+
+variable "argocd_ingress_tls_enabled" {
+  description = "Увімкнути TLS для Ingress"
+  type        = bool
+  default     = true
+}
+
+variable "argocd_ingress_tls_secret_name" {
+  description = "Назва TLS secret"
+  type        = string
+  default     = "argocd-tls"
+}
+
+variable "argocd_enable_metrics" {
+  description = "Увімкнути Prometheus метрики"
+  type        = bool
+  default     = true
+}
+
+variable "argocd_enable_notifications" {
+  description = "Увімкнути Argo CD Notifications"
+  type        = bool
+  default     = true
+}
+
+variable "argocd_enable_applicationset" {
+  description = "Увімкнути ApplicationSet Controller"
+  type        = bool
+  default     = true
+}
+
+variable "argocd_enable_dex" {
+  description = "Увімкнути Dex для OIDC"
+  type        = bool
+  default     = false
+}
+
+variable "argocd_enable_hpa" {
+  description = "Увімкнути HorizontalPodAutoscaler"
+  type        = bool
+  default     = false
+}
+
+variable "argocd_hpa_min_replicas" {
+  description = "Мінімальна кількість реплік HPA"
+  type        = number
+  default     = 2
+}
+
+variable "argocd_hpa_max_replicas" {
+  description = "Максимальна кількість реплік HPA"
+  type        = number
+  default     = 5
+}
+
+variable "argocd_hpa_target_cpu_utilization" {
+  description = "Цільова утилізація CPU для HPA"
+  type        = number
+  default     = 70
+}
+
+variable "argocd_hpa_target_memory_utilization" {
+  description = "Цільова утилізація пам'яті для HPA"
+  type        = number
+  default     = 80
+}
+
+variable "argocd_enable_prometheus_monitoring" {
+  description = "Увімкнути Prometheus моніторинг"
+  type        = bool
+  default     = true
+}
+
+variable "argocd_prometheus_scrape_interval" {
+  description = "Інтервал збору метрик Prometheus"
+  type        = string
+  default     = "30s"
+}
+
+variable "argocd_enable_backup" {
+  description = "Увімкнути автоматичне резервне копіювання"
+  type        = bool
+  default     = false
+}
+
+variable "argocd_backup_schedule" {
+  description = "Cron розклад для резервного копіювання"
+  type        = string
+  default     = "0 2 * * *"
+}
+
+variable "argocd_backup_retention_days" {
+  description = "Кількість днів зберігання резервних копій"
+  type        = number
+  default     = 30
+}
+
+variable "argocd_create_demo_application" {
+  description = "Створити демонстраційний Application"
+  type        = bool
+  default     = false
+}
+
+variable "argocd_demo_app_repo_url" {
+  description = "URL репозиторію для демо додатку"
+  type        = string
+  default     = "https://github.com/argoproj/argocd-example-apps.git"
+}
+
+variable "argocd_demo_app_target_revision" {
+  description = "Target revision для демо додатку"
+  type        = string
+  default     = "HEAD"
+}
+
+variable "argocd_demo_app_path" {
+  description = "Шлях в репозиторії для демо додатку"
+  type        = string
+  default     = "guestbook"
+}
+
+variable "argocd_demo_app_namespace" {
+  description = "Namespace для демо додатку"
+  type        = string
+  default     = "default"
+}
+
+variable "argocd_create_app_project" {
+  description = "Створити AppProject"
+  type        = bool
+  default     = false
+}
+
+variable "argocd_app_project_name" {
+  description = "Назва AppProject"
+  type        = string
+  default     = "default"
+}
+
+variable "argocd_app_project_source_repos" {
+  description = "Дозволені source repositories"
+  type        = list(string)
+  default     = ["*"]
+}
+
+variable "argocd_app_project_admin_groups" {
+  description = "OIDC групи з admin правами"
+  type        = list(string)
+  default     = []
+}
+
+variable "argocd_app_project_developer_groups" {
+  description = "OIDC групи з developer правами"
+  type        = list(string)
+  default     = []
+}
+
+variable "argocd_timezone" {
+  description = "Часовий пояс для Argo CD"
+  type        = string
+  default     = "UTC"
+}
+
+variable "argocd_log_level" {
+  description = "Рівень логування"
+  type        = string
+  default     = "info"
+}
+
+variable "argocd_log_format" {
+  description = "Формат логування"
+  type        = string
+  default     = "text"
+}
+
+variable "argocd_sync_timeout" {
+  description = "Timeout для sync операцій"
+  type        = number
+  default     = 300
+}
+
+variable "argocd_self_heal_timeout" {
+  description = "Timeout для self-heal операцій"
+  type        = number
+  default     = 5
+}
+
+variable "argocd_enable_webhooks" {
+  description = "Увімкнути webhook підтримку"
+  type        = bool
+  default     = true
+}
+
+variable "argocd_webhook_github_secret" {
+  description = "Secret для GitHub webhooks"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "argocd_webhook_gitlab_secret" {
+  description = "Secret для GitLab webhooks"
+  type        = string
+  default     = ""
+  sensitive   = true
 }
 
 variable "common_tags" {

@@ -146,3 +146,36 @@ output "jenkins_api_url" {
   description = "URL для Jenkins API"
   value       = module.jenkins.jenkins_api_url
 }
+
+# Argo CD виводи
+output "argocd_url" {
+  description = "URL для доступу до Argo CD"
+  value       = module.argocd.argocd_url
+}
+
+output "argocd_admin_password" {
+  description = "Пароль адміністратора Argo CD"
+  value       = module.argocd.argocd_admin_password
+  sensitive   = true
+}
+
+output "argocd_namespace" {
+  description = "Kubernetes namespace Argo CD"
+  value       = module.argocd.argocd_namespace
+}
+
+output "argocd_cli_login_command" {
+  description = "Команда для логіну через Argo CD CLI"
+  value       = module.argocd.argocd_cli_login_command
+  sensitive   = true
+}
+
+output "argocd_webhook_urls" {
+  description = "URLs для Git webhooks"
+  value       = module.argocd.argocd_webhook_urls
+}
+
+output "argocd_api_url" {
+  description = "URL для Argo CD API"
+  value       = module.argocd.argocd_api_url
+}

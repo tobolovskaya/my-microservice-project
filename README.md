@@ -9,6 +9,9 @@
 - **Безпека**: Автоматичне шифрування, Security Groups, мережева ізоляція
 - **Продакшн готовність**: Multi-AZ, бекапи, моніторинг, Performance Insights
 - **Простота використання**: Мінімальна конфігурація з розумними значеннями за замовчуванням
+- **Argo CD GitOps** для continuous deployment
+- **ApplicationSet Controller** для управління множинними додатками
+- **Notifications** для Slack/Email інтеграції
 
 ## 📁 Структура проєкту
 
@@ -53,6 +56,12 @@ Project/
         ├── variables.tf    # Змінні для Jenkins
         ├── providers.tf    # Провайдери (Kubernetes, Helm)
         ├── values.yaml     # Конфігурація Jenkins
+        └── outputs.tf      # Виводи (URL, креденшели)
+    └── argo_cd/            # Модуль для Argo CD GitOps
+        ├── argo_cd.tf      # Helm release для Argo CD
+        ├── variables.tf    # Змінні для Argo CD
+        ├── providers.tf    # Провайдери (Kubernetes, Helm)
+        ├── values.yaml     # Конфігурація Argo CD
         └── outputs.tf      # Виводи (URL, креденшели)
 ```
 
@@ -108,6 +117,10 @@ kubernetes_version = "1.28"
 jenkins_admin_password = "secure-password"
 jenkins_ingress_hostname = "jenkins.yourdomain.com"
 
+# Argo CD налаштування
+argocd_admin_password = "secure-password"
+argocd_ingress_hostname = "argocd.yourdomain.com"
+
 # Теги
 common_tags = {
   Environment = "dev"
@@ -145,6 +158,22 @@ terraform output kubectl_port_forward_command
 
 # Отримання пароля адміністратора
 terraform output jenkins_admin_password
+```
+
+### 7. Доступ до Argo CD
+
+```bash
+# Отримання URL Argo CD
+terraform output argocd_url
+
+# Port-forward для локального доступу
+kubectl port-forward -n argocd svc/argocd-argocd-server 8080:80
+
+# Отримання пароля адміністратора
+terraform output argocd_admin_password
+
+# Логін через CLI
+terraform output argocd_cli_login_command
 ```
 
 ### 5. Завантаження образів в ECR
@@ -280,6 +309,85 @@ module "ecr" {
 ```
 
 ### Jenkins CI/CD платформа
+
+### Argo CD GitOps платформа
+
+```hcl
+module "argocd" {
+  source = "./modules/argo_cd"
+  
+  # Основні параметри
+  release_name = "argocd"
+  namespace    = "argocd"
+  
+  # Креденшели
+  admin_password = "secure-password-here"
+  
+  # Ресурси
+  controller_resources = {
+    requests = {
+      cpu    = "250m"
+      memory = "1Gi"
+    }
+    limits = {
+      cpu    = "500m"
+      memory = "2Gi"
+    }
+  }
+  
+  server_resources = {
+    requests = {
+      cpu    = "100m"
+      memory = "128Mi"
+    }
+    limits = {
+      cpu    = "500m"
+      memory = "512Mi"
+    }
+  }
+  
+  # High Availability
+  enable_ha = true
+  controller_replicas = 1
+  server_replicas = 3
+  repo_server_replicas = 2
+  
+  # Ingress
+  ingress_enabled     = true
+  ingress_hostname    = "argocd.company.com"
+  ingress_tls_enabled = true
+  
+  # Функціональність
+  enable_metrics        = true
+  enable_notifications  = true
+  enable_applicationset = true
+  enable_dex           = true
+  
+  # GitOps налаштування
+  create_demo_application = true
+  demo_app_repo_url      = "https://github.com/company/k8s-manifests.git"
+  
+  # AppProject
+  create_app_project           = true
+  app_project_name            = "production"
+  app_project_source_repos    = ["https://github.com/company/*"]
+  app_project_admin_groups    = ["argocd-admins"]
+  app_project_developer_groups = ["developers"]
+  
+  # Моніторинг
+  enable_prometheus_monitoring = true
+  
+  # Backup
+  enable_backup         = true
+  backup_schedule       = "0 2 * * *"
+  backup_retention_days = 90
+  
+  tags = {
+    Environment = "production"
+    Project     = "gitops"
+  }
+}
+```
 
 ```hcl
 module "jenkins" {
@@ -719,6 +827,129 @@ docker push 123456789012.dkr.ecr.us-west-2.amazonaws.com/my-app:v1.0.0
 ```
 
 ## 🔧 Робота з Jenkins
+
+## 🔧 Робота з Argo CD
+
+### Доступ до Argo CD
+
+```bash
+# Отримання URL
+terraform output argocd_url
+
+# Port-forward для локального доступу
+kubectl port-forward -n argocd svc/argocd-argocd-server 8080:80
+
+# Відкрити в браузері
+open http://localhost:8080
+
+# Логін: admin
+# Пароль: terraform output argocd_admin_password
+```
+
+### Встановлення Argo CD CLI
+
+```bash
+# macOS
+brew install argocd
+
+# Linux
+curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
+rm argocd-linux-amd64
+
+# Логін через CLI
+terraform output argocd_cli_login_command
+```
+
+### Створення Application
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: my-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/company/k8s-manifests
+    targetRevision: HEAD
+    path: apps/my-app
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+```
+
+### ApplicationSet для множинних додатків
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: microservices
+  namespace: argocd
+spec:
+  generators:
+  - git:
+      repoURL: https://github.com/company/k8s-manifests
+      revision: HEAD
+      directories:
+      - path: apps/*
+  template:
+    metadata:
+      name: '{{path.basename}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/company/k8s-manifests
+        targetRevision: HEAD
+        path: '{{path}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{path.basename}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+```
+
+### Налаштування Git Webhooks
+
+```bash
+# Отримання webhook URLs
+terraform output argocd_webhook_urls
+
+# GitHub webhook URL: https://argocd.yourdomain.com/api/webhook
+# GitLab webhook URL: https://argocd.yourdomain.com/api/webhook
+```
+
+### CLI команди
+
+```bash
+# Список додатків
+argocd app list
+
+# Синхронізація додатку
+argocd app sync my-app
+
+# Статус додатку
+argocd app get my-app
+
+# Логи синхронізації
+argocd app logs my-app
+
+# Rollback
+argocd app rollback my-app
+
+# Видалення додатку
+argocd app delete my-app
+```
 
 ### Доступ до Jenkins
 
@@ -1256,6 +1487,32 @@ kubectl describe pod <pod-name>
 
 ### Jenkins проблеми
 
+### Argo CD проблеми
+
+1. **Application не синхронізується**: Перевірте права доступу до Git репозиторію
+2. **Server недоступний**: Перевірте Ingress та DNS налаштування
+3. **Sync помилки**: Перевірте RBAC права та namespace існування
+4. **Webhook не працює**: Перевірте firewall та SSL сертифікати
+
+```bash
+# Діагностика Argo CD
+kubectl describe pod -n argocd -l app.kubernetes.io/name=argocd-server
+kubectl logs -n argocd -l app.kubernetes.io/name=argocd-application-controller --tail=100
+kubectl get events -n argocd --sort-by='.lastTimestamp'
+
+# Перевірка Applications
+kubectl get applications -n argocd
+kubectl describe application -n argocd my-app
+
+# Перевірка AppProjects
+kubectl get appprojects -n argocd
+kubectl describe appproject -n argocd default
+
+# Перевірка Ingress
+kubectl get ingress -n argocd
+kubectl describe ingress -n argocd
+```
+
 1. **Pod не запускається**: Перевірте ресурси та PVC
 2. **Ingress не працює**: Перевірте Ingress Controller та DNS
 3. **Плагіни не встановлюються**: Перевірте інтернет-доступ з кластера
@@ -1283,6 +1540,9 @@ kubectl describe ingress -n jenkins
 - [AWS EKS Documentation](https://docs.aws.amazon.com/eks/)
 - [Jenkins Documentation](https://www.jenkins.io/doc/)
 - [Jenkins Kubernetes Plugin](https://plugins.jenkins.io/kubernetes/)
+- [Argo CD Documentation](https://argo-cd.readthedocs.io/)
+- [Argo CD CLI Documentation](https://argo-cd.readthedocs.io/en/stable/cli_installation/)
+- [GitOps Best Practices](https://www.weave.works/technologies/gitops/)
 - [Kubernetes Documentation](https://kubernetes.io/docs/)
 - [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 - [EKS Best Practices](https://aws.github.io/aws-eks-best-practices/)

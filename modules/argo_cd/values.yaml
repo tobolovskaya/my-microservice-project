@@ -1,0 +1,451 @@
+# Argo CD Helm Chart Values
+# Базова конфігурація для Argo CD
+
+global:
+  # Загальні налаштування
+  image:
+    repository: quay.io/argoproj/argocd
+    tag: "v2.9.3"
+    imagePullPolicy: IfNotPresent
+  
+  # Домен для Argo CD
+  domain: argocd.local
+  
+  # Додаткові labels
+  additionalLabels:
+    app.kubernetes.io/part-of: argocd
+
+# Argo CD Server налаштування
+server:
+  # Основні налаштування
+  name: server
+  replicas: 1
+  
+  # Ресурси (будуть перевизначені через Terraform)
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  
+  # Автоскейлінг
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 50
+    targetMemoryUtilizationPercentage: 50
+  
+  # Налаштування сервісу
+  service:
+    type: ClusterIP
+    port: 80
+    portName: http
+  
+  # Ingress налаштування
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hostname: argocd.local
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/backend-protocol: "GRPC"
+    tls:
+      - secretName: argocd-tls
+        hosts:
+          - argocd.local
+  
+  # Додаткові аргументи
+  extraArgs:
+    - --insecure  # Для розробки, видаліть для продакшну
+  
+  # Конфігурація
+  config:
+    # URL для Argo CD
+    url: https://argocd.local
+    
+    # OIDC конфігурація (опціонально)
+    oidc.config: |
+      name: OIDC
+      issuer: https://your-oidc-provider.com
+      clientId: argocd
+      clientSecret: $oidc.clientSecret
+      requestedScopes: ["openid", "profile", "email", "groups"]
+      requestedIDTokenClaims: {"groups": {"essential": true}}
+    
+    # Repositories конфігурація
+    repositories: |
+      - type: git
+        url: https://github.com/argoproj/argocd-example-apps
+      - type: helm
+        url: https://argoproj.github.io/argo-helm
+        name: argo
+    
+    # Resource customizations
+    resource.customizations: |
+      networking.k8s.io/Ingress:
+        health.lua: |
+          hs = {}
+          hs.status = "Healthy"
+          return hs
+  
+  # RBAC конфігурація
+  rbacConfig:
+    policy.default: role:readonly
+    policy.csv: |
+      p, role:admin, applications, *, */*, allow
+      p, role:admin, clusters, *, *, allow
+      p, role:admin, repositories, *, *, allow
+      g, argocd-admins, role:admin
+
+# Application Controller налаштування
+controller:
+  name: application-controller
+  replicas: 1
+  
+  # Ресурси (будуть перевизначені через Terraform)
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: 500m
+      memory: 2Gi
+  
+  # Метрики
+  metrics:
+    enabled: true
+    service:
+      type: ClusterIP
+      port: 8082
+      portName: http-metrics
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+  
+  # Додаткові аргументи
+  extraArgs:
+    - --repo-server-timeout-seconds=60
+    - --status-processors=20
+    - --operation-processors=10
+
+# Repo Server налаштування
+repoServer:
+  name: repo-server
+  replicas: 1
+  
+  # Ресурси (будуть перевизначені через Terraform)
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1
+      memory: 1Gi
+  
+  # Автоскейлінг
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 50
+    targetMemoryUtilizationPercentage: 50
+  
+  # Метрики
+  metrics:
+    enabled: true
+    service:
+      type: ClusterIP
+      port: 8084
+      portName: http-metrics
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+  
+  # Volumes для додаткових інструментів
+  volumes:
+    - name: custom-tools
+      emptyDir: {}
+  
+  volumeMounts:
+    - name: custom-tools
+      mountPath: /custom-tools
+  
+  # Init контейнери для встановлення додаткових інструментів
+  initContainers:
+    - name: download-tools
+      image: alpine/git:latest
+      command: [sh, -c]
+      args:
+        - |
+          # Встановлення додаткових інструментів
+          echo "Installing additional tools..."
+          # Приклад: встановлення kustomize
+          # curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          # mv kustomize /custom-tools/
+      volumeMounts:
+        - name: custom-tools
+          mountPath: /custom-tools
+
+# Dex налаштування (OIDC)
+dex:
+  enabled: false
+  name: dex-server
+  
+  # Ресурси
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 50m
+      memory: 128Mi
+  
+  # Конфігурація
+  config:
+    issuer: https://argocd.local/api/dex
+    storage:
+      type: memory
+    web:
+      http: 0.0.0.0:5556
+    logger:
+      level: info
+      format: text
+    connectors:
+      # Приклад GitHub connector
+      - type: github
+        id: github
+        name: GitHub
+        config:
+          clientID: $github.clientId
+          clientSecret: $github.clientSecret
+          orgs:
+            - name: your-github-org
+
+# Redis налаштування
+redis:
+  enabled: true
+  name: redis
+  
+  # Ресурси
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# Redis HA налаштування (для HA режиму)
+redis-ha:
+  enabled: false
+  haproxy:
+    enabled: true
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+# ApplicationSet Controller
+applicationSet:
+  enabled: true
+  name: applicationset-controller
+  replicas: 1
+  
+  # Ресурси
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  
+  # Метрики
+  metrics:
+    enabled: true
+    service:
+      type: ClusterIP
+      port: 8080
+      portName: http-metrics
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+
+# Notifications Controller
+notifications:
+  enabled: true
+  name: notifications-controller
+  
+  # Ресурси
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  
+  # Метрики
+  metrics:
+    enabled: true
+    service:
+      type: ClusterIP
+      port: 9001
+      portName: http-metrics
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+  
+  # Конфігурація нотифікацій
+  notifiers:
+    service.slack: |
+      token: $slack-token
+    service.email.gmail: |
+      username: $email-username
+      password: $email-password
+      host: smtp.gmail.com
+      port: 587
+      from: $email-username
+  
+  # Шаблони нотифікацій
+  templates:
+    template.app-deployed: |
+      email:
+        subject: New version of an application {{.app.metadata.name}} is up and running.
+      message: |
+        {{if eq .serviceType "slack"}}:white_check_mark:{{end}} Application {{.app.metadata.name}} is now running new version.
+      slack:
+        attachments: |
+          [{
+            "title": "{{ .app.metadata.name}}",
+            "title_link":"{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
+            "color": "#18be52",
+            "fields": [
+            {
+              "title": "Sync Status",
+              "value": "{{.app.status.sync.status}}",
+              "short": true
+            },
+            {
+              "title": "Repository",
+              "value": "{{.app.spec.source.repoURL}}",
+              "short": true
+            },
+            {
+              "title": "Revision",
+              "value": "{{.app.status.sync.revision}}",
+              "short": true
+            }
+            {{range $index, $c := .app.status.conditions}}
+            {{if not $index}},{{end}}
+            {{if $index}},{{end}}
+            {
+              "title": "{{$c.type}}",
+              "value": "{{$c.message}}",
+              "short": true
+            }
+            {{end}}
+            ]
+          }]
+  
+  # Тригери нотифікацій
+  triggers:
+    trigger.on-deployed: |
+      - description: Application is synced and healthy
+        send:
+        - app-deployed
+        when: app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
+    trigger.on-health-degraded: |
+      - description: Application has degraded
+        send:
+        - app-health-degraded
+        when: app.status.health.status == 'Degraded'
+    trigger.on-sync-failed: |
+      - description: Application syncing has failed
+        send:
+        - app-sync-failed
+        when: app.status.operationState.phase in ['Error', 'Failed']
+
+# Конфігурації
+configs:
+  # Параметри командного рядка
+  params:
+    server.insecure: false
+    server.rootpath: ""
+    server.grpc.web: true
+    server.disable.auth: false
+    
+    # Controller параметри
+    controller.status.processors: 20
+    controller.operation.processors: 10
+    controller.self.heal.timeout.seconds: 5
+    controller.repo.server.timeout.seconds: 60
+    
+    # Repo server параметри
+    reposerver.parallelism.limit: 0
+  
+  # Secret з паролем адміністратора
+  secret:
+    createSecret: true
+    argocdServerAdminPassword: ""  # Буде встановлено через Terraform
+    argocdServerAdminPasswordMtime: "2023-01-01T00:00:00Z"
+  
+  # Конфігурація репозиторіїв
+  repositories:
+    # Приклад приватного репозиторію
+    # private-repo:
+    #   url: https://github.com/private/repo
+    #   passwordSecret:
+    #     name: private-repo-secret
+    #     key: password
+    #   usernameSecret:
+    #     name: private-repo-secret
+    #     key: username
+  
+  # Конфігурація кластерів
+  clusters:
+    # Локальний кластер
+    https://kubernetes.default.svc:
+      tlsClientConfig:
+        insecure: false
+
+# Глобальні налаштування безпеки
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 999
+  runAsGroup: 999
+  fsGroup: 999
+
+# Network Policy
+networkPolicy:
+  create: false
+  defaultDenyIngress: false
+
+# Service Monitor для Prometheus
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  relabelings: []
+  metricRelabelings: []
+  namespace: ""
+  additionalLabels: {}
+
+# Додаткові ресурси
+extraObjects: []
+  # - apiVersion: v1
+  #   kind: Secret
+  #   metadata:
+  #     name: argocd-notifications-secret
+  #   stringData:
+  #     slack-token: your-slack-token
+
+# Створення CRDs
+createAggregateRoles: true
+createClusterRoles: true
