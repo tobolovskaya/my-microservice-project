@@ -55,6 +55,18 @@ node_groups = [
   }
 ]
 
+# ECR налаштування
+ecr_repository_name = "my-app"
+ecr_image_tag_mutability = "MUTABLE"  # MUTABLE або IMMUTABLE
+ecr_scan_on_push = true
+ecr_enable_registry_scanning = false
+ecr_encryption_type = "AES256"  # AES256 або KMS
+ecr_enable_lifecycle_policy = true
+ecr_max_image_count = 10
+ecr_untagged_image_days = 1
+ecr_enable_cross_account_access = false
+ecr_cross_account_arns = []
+
 # Теги
 common_tags = {
   Environment = "dev"

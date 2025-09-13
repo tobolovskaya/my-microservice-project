@@ -44,6 +44,10 @@ Project/
         ├── variables.tf    # Змінні для EKS
         ├── outputs.tf      # Виведення інформації
         └── user_data.sh    # Скрипт для node groups
+    └── ecr/                # Модуль для Container Registry
+        ├── ecr.tf          # Створення ECR репозиторію
+        ├── variables.tf    # Змінні для ECR
+        └── outputs.tf      # Виведення URL репозиторію
 ```
 
 ## 🚀 Швидкий старт
@@ -120,6 +124,21 @@ aws eks update-kubeconfig --region us-west-2 --name my-cluster
 kubectl get nodes
 ```
 
+### 5. Завантаження образів в ECR
+
+```bash
+# Отримання команд для завантаження
+terraform output ecr_docker_push_commands
+
+# Логін в ECR
+aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin <account-id>.dkr.ecr.us-west-2.amazonaws.com
+
+# Збірка та завантаження образу
+docker build -t my-app .
+docker tag my-app:latest <ecr-url>:latest
+docker push <ecr-url>:latest
+```
+
 ## 📖 Приклади використання
 
 ### S3 Backend для Terraform State
@@ -185,6 +204,50 @@ module "rds" {
   multi_az                = false
   backup_retention_period = 7
   storage_encrypted      = true
+  
+  tags = {
+    Environment = "production"
+    Project     = "my-app"
+  }
+}
+```
+
+### ECR репозиторій з lifecycle політикою
+
+```hcl
+module "ecr" {
+  source = "./modules/ecr"
+  
+  # Основні параметри
+  repository_name      = "my-application"
+  image_tag_mutability = "IMMUTABLE"  # Для продакшну
+  
+  # Безпека
+  scan_on_push             = true
+  enable_registry_scanning = true
+  encryption_type         = "KMS"
+  kms_key                = "arn:aws:kms:us-west-2:123456789012:key/12345678-1234-1234-1234-123456789012"
+  
+  # Управління образами
+  enable_lifecycle_policy = true
+  max_image_count        = 50
+  untagged_image_days    = 7
+  lifecycle_tag_prefixes = ["v", "release", "prod"]
+  
+  # Міжакаунтний доступ
+  enable_cross_account_access = true
+  cross_account_arns = [
+    "arn:aws:iam::123456789012:root",
+    "arn:aws:iam::987654321098:root"
+  ]
+  
+  # Реплікація
+  replication_regions = [
+    {
+      region      = "eu-west-1"
+      registry_id = "123456789012"
+    }
+  ]
   
   tags = {
     Environment = "production"
@@ -412,6 +475,16 @@ module "mysql_rds" {
 | `eks_cluster_name` | `string` | `"my-eks-cluster"` | Назва EKS кластера |
 | `kubernetes_version` | `string` | `"1.28"` | Версія Kubernetes |
 | `node_groups` | `list(object)` | `[...]` | Конфігурація node groups |
+
+### ECR параметри
+
+| Змінна | Тип | За замовчуванням | Опис |
+|--------|-----|------------------|------|
+| `ecr_repository_name` | `string` | `"my-app"` | Назва ECR репозиторію |
+| `ecr_image_tag_mutability` | `string` | `"MUTABLE"` | Можливість змінювати теги |
+| `ecr_scan_on_push` | `bool` | `true` | Сканувати образи при завантаженні |
+| `ecr_encryption_type` | `string` | `"AES256"` | Тип шифрування (AES256/KMS) |
+| `ecr_enable_cross_account_access` | `bool` | `false` | Міжакаунтний доступ |
 | `enable_ebs_csi_driver` | `bool` | `true` | Увімкнути EBS CSI Driver |
 
 | `deletion_protection` | `bool` | `true` | Захист від видалення |
@@ -453,6 +526,16 @@ module "mysql_rds" {
 | `kubectl_config_command` | Команда для налаштування kubectl |
 | `cluster_security_group_id` | ID Security Group кластера |
 | `node_security_group_id` | ID Security Group node groups |
+
+### ECR виводи
+
+| Вивід | Опис |
+|-------|------|
+| `ecr_repository_url` | URL ECR репозиторію |
+| `ecr_repository_arn` | ARN ECR репозиторію |
+| `ecr_docker_push_commands` | Команди для завантаження образу |
+| `ecr_login_command` | Команда для логіну в ECR |
+| `ecr_login_command` | Команда для логіну в ECR |
 
 ### Ідентифікатори
 
@@ -509,6 +592,78 @@ aws eks update-nodegroup-config \
 # Або через Terraform
 # Змініть desired_size в terraform.tfvars та виконайте:
 terraform apply
+```
+
+## 🐳 Робота з ECR
+
+### Завантаження образів
+
+```bash
+# Отримання команд
+terraform output ecr_docker_push_commands
+
+# Логін в ECR
+aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 123456789012.dkr.ecr.us-west-2.amazonaws.com
+
+# Збірка образу
+docker build -t my-app .
+
+# Тегування
+docker tag my-app:latest 123456789012.dkr.ecr.us-west-2.amazonaws.com/my-app:latest
+docker tag my-app:latest 123456789012.dkr.ecr.us-west-2.amazonaws.com/my-app:v1.0.0
+
+# Завантаження
+docker push 123456789012.dkr.ecr.us-west-2.amazonaws.com/my-app:latest
+docker push 123456789012.dkr.ecr.us-west-2.amazonaws.com/my-app:v1.0.0
+```
+
+### Використання в Kubernetes
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+      - name: my-app
+        image: 123456789012.dkr.ecr.us-west-2.amazonaws.com/my-app:v1.0.0
+        ports:
+        - containerPort: 8080
+```
+
+### CI/CD інтеграція
+
+```yaml
+# GitHub Actions приклад
+- name: Configure AWS credentials
+  uses: aws-actions/configure-aws-credentials@v1
+  with:
+    aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+    aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    aws-region: us-west-2
+
+- name: Login to Amazon ECR
+  id: login-ecr
+  uses: aws-actions/amazon-ecr-login@v1
+
+- name: Build, tag, and push image to Amazon ECR
+  env:
+    ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+    ECR_REPOSITORY: my-app
+    IMAGE_TAG: ${{ github.sha }}
+  run: |
+    docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+    docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 ```
 
 ## 🔄 Зміна типу БД

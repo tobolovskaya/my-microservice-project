@@ -75,6 +75,34 @@ module "eks" {
   tags = var.common_tags
 }
 
+# Модуль ECR
+module "ecr" {
+  source = "./modules/ecr"
+  
+  # Основні параметри
+  repository_name      = var.ecr_repository_name
+  image_tag_mutability = var.ecr_image_tag_mutability
+  
+  # Сканування
+  scan_on_push             = var.ecr_scan_on_push
+  enable_registry_scanning = var.ecr_enable_registry_scanning
+  
+  # Шифрування
+  encryption_type = var.ecr_encryption_type
+  kms_key        = var.ecr_kms_key
+  
+  # Політика життєвого циклу
+  enable_lifecycle_policy = var.ecr_enable_lifecycle_policy
+  max_image_count        = var.ecr_max_image_count
+  untagged_image_days    = var.ecr_untagged_image_days
+  
+  # Міжакаунтний доступ
+  enable_cross_account_access = var.ecr_enable_cross_account_access
+  cross_account_arns         = var.ecr_cross_account_arns
+  
+  tags = var.common_tags
+}
+
 # Змінні
 variable "aws_region" {
   description = "AWS регіон"
@@ -231,6 +259,73 @@ variable "enable_ebs_csi_driver" {
   description = "Увімкнути AWS EBS CSI Driver"
   type        = bool
   default     = true
+}
+
+# ECR змінні
+variable "ecr_repository_name" {
+  description = "Назва ECR репозиторію"
+  type        = string
+  default     = "my-app"
+}
+
+variable "ecr_image_tag_mutability" {
+  description = "Можливість змінювати теги образів"
+  type        = string
+  default     = "MUTABLE"
+}
+
+variable "ecr_scan_on_push" {
+  description = "Сканувати образи при завантаженні"
+  type        = bool
+  default     = true
+}
+
+variable "ecr_enable_registry_scanning" {
+  description = "Увімкнути розширене сканування реєстру"
+  type        = bool
+  default     = false
+}
+
+variable "ecr_encryption_type" {
+  description = "Тип шифрування ECR"
+  type        = string
+  default     = "AES256"
+}
+
+variable "ecr_kms_key" {
+  description = "ARN KMS ключа для шифрування ECR"
+  type        = string
+  default     = null
+}
+
+variable "ecr_enable_lifecycle_policy" {
+  description = "Увімкнути політику життєвого циклу ECR"
+  type        = bool
+  default     = true
+}
+
+variable "ecr_max_image_count" {
+  description = "Максимальна кількість образів для зберігання"
+  type        = number
+  default     = 10
+}
+
+variable "ecr_untagged_image_days" {
+  description = "Кількість днів для зберігання образів без тегів"
+  type        = number
+  default     = 1
+}
+
+variable "ecr_enable_cross_account_access" {
+  description = "Увімкнути міжакаунтний доступ до ECR"
+  type        = bool
+  default     = false
+}
+
+variable "ecr_cross_account_arns" {
+  description = "ARN акаунтів для міжакаунтного доступу"
+  type        = list(string)
+  default     = []
 }
 
 variable "common_tags" {

@@ -83,3 +83,29 @@ output "node_security_group_id" {
   description = "ID Security Group для EKS node groups"
   value       = module.eks.node_security_group_id
 }
+
+# ECR виводи
+output "ecr_repository_url" {
+  description = "URL ECR репозиторію"
+  value       = module.ecr.repository_url
+}
+
+output "ecr_repository_arn" {
+  description = "ARN ECR репозиторію"
+  value       = module.ecr.repository_arn
+}
+
+output "ecr_registry_id" {
+  description = "ID ECR реєстру"
+  value       = module.ecr.registry_id
+}
+
+output "ecr_docker_push_commands" {
+  description = "Команди для завантаження образу в ECR"
+  value       = module.ecr.docker_push_commands
+}
+
+output "ecr_login_command" {
+  description = "Команда для логіну в ECR"
+  value       = module.ecr.ecr_login_command
+}
