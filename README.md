@@ -16,6 +16,8 @@
 Project/
 ├── main.tf                  # Головний файл для підключення модулів
 ├── backend.tf               # Налаштування бекенду для стейтів
+├── setup-backend.tf         # Початкове налаштування S3 backend
+├── backend-setup.tfvars     # Конфігурація для setup-backend.tf
 ├── outputs.tf               # Загальні виводи ресурсів
 ├── terraform.tfvars.example # Приклад конфігурації
 ├── README.md               # Документація
@@ -25,6 +27,11 @@ Project/
     │   ├── routes.tf
     │   ├── variables.tf
     │   └── outputs.tf
+    ├── s3-backend/         # Модуль для S3 та DynamoDB backend
+    │   ├── s3.tf           # Створення S3 бакета
+    │   ├── dynamodb.tf     # Створення DynamoDB таблиці
+    │   ├── variables.tf    # Змінні для backend
+    │   └── outputs.tf      # Виведення інформації
     ├── rds/                # Модуль для RDS/Aurora
         ├── rds.tf          # Звичайна RDS
         ├── aurora.tf       # Aurora кластер
@@ -40,6 +47,29 @@ Project/
 ```
 
 ## 🚀 Швидкий старт
+
+### 0. Налаштування S3 Backend (перший раз)
+
+Перед використанням основної інфраструктури потрібно створити S3 backend:
+
+```bash
+# 1. Налаштуйте backend конфігурацію
+cp backend-setup.tfvars.example backend-setup.tfvars
+# Відредагуйте backend-setup.tfvars з унікальною назвою бакета
+
+# 2. Створіть S3 та DynamoDB ресурси
+terraform init
+terraform apply -var-file="backend-setup.tfvars" setup-backend.tf
+
+# 3. Скопіюйте виведену конфігурацію в backend.tf
+terraform output backend_configuration
+
+# 4. Ініціалізуйте backend
+terraform init -migrate-state
+
+# 5. Видаліть setup-backend.tf (більше не потрібен)
+rm setup-backend.tf backend-setup.tfvars
+```
 
 ### 1. Клонування та налаштування
 
@@ -91,6 +121,43 @@ kubectl get nodes
 ```
 
 ## 📖 Приклади використання
+
+### S3 Backend для Terraform State
+
+```hcl
+module "s3_backend" {
+  source = "./modules/s3-backend"
+  
+  # Основні параметри
+  bucket_name         = "my-terraform-state-bucket"
+  dynamodb_table_name = "terraform-state-lock"
+  environment         = "production"
+  
+  # S3 налаштування
+  state_retention_days  = 365  # Зберігати стан рік
+  enable_access_logging = true
+  
+  # DynamoDB налаштування
+  dynamodb_billing_mode         = "PROVISIONED"
+  dynamodb_read_capacity        = 10
+  dynamodb_write_capacity       = 10
+  enable_point_in_time_recovery = true
+  
+  # Auto Scaling
+  enable_dynamodb_autoscaling             = true
+  dynamodb_autoscaling_read_max_capacity  = 100
+  dynamodb_autoscaling_write_max_capacity = 100
+  
+  # Моніторинг
+  enable_cloudwatch_alarms = true
+  sns_topic_arn           = "arn:aws:sns:us-west-2:123456789012:terraform-alerts"
+  
+  tags = {
+    Environment = "production"
+    Project     = "infrastructure"
+  }
+}
+```
 
 ### Звичайна PostgreSQL RDS
 
@@ -274,6 +341,19 @@ module "mysql_rds" {
 
 ## 🔧 Змінні модуля
 
+### S3 Backend модуль
+
+| Змінна | Тип | За замовчуванням | Опис |
+|--------|-----|------------------|------|
+| `bucket_name` | `string` | - | Назва S3 бакета (обов'язково) |
+| `dynamodb_table_name` | `string` | `"terraform-state-lock"` | Назва DynamoDB таблиці |
+| `environment` | `string` | `"dev"` | Середовище (dev, staging, prod) |
+| `state_retention_days` | `number` | `90` | Днів зберігання старих версій |
+| `enable_access_logging` | `bool` | `false` | Логування доступу до S3 |
+| `dynamodb_billing_mode` | `string` | `"PAY_PER_REQUEST"` | Режим біллінгу DynamoDB |
+| `enable_point_in_time_recovery` | `bool` | `true` | Point-in-Time Recovery |
+| `enable_cloudwatch_alarms` | `bool` | `false` | CloudWatch алерти |
+
 ### Основні параметри
 
 | Змінна | Тип | За замовчуванням | Опис |
@@ -345,6 +425,16 @@ module "mysql_rds" {
 | `enabled_cloudwatch_logs_exports` | `list(string)` | `[]` | Типи логів для CloudWatch |
 
 ## 📤 Виводи модуля
+
+### S3 Backend виводи
+
+| Вивід | Опис |
+|-------|------|
+| `s3_bucket_id` | ID S3 бакета |
+| `s3_bucket_arn` | ARN S3 бакета |
+| `dynamodb_table_name` | Назва DynamoDB таблиці |
+| `terraform_backend_config` | Об'єкт конфігурації backend |
+| `backend_configuration` | Готовий блок backend для копіювання |
 
 ### Підключення
 
@@ -422,6 +512,29 @@ terraform apply
 ```
 
 ## 🔄 Зміна типу БД
+
+### Міграція на S3 Backend
+
+Якщо ви використовуєте локальний state і хочете перейти на S3:
+
+```bash
+# 1. Створіть S3 backend ресурси
+terraform apply -var-file="backend-setup.tfvars" setup-backend.tf
+
+# 2. Додайте backend конфігурацію в main.tf
+terraform {
+  backend "s3" {
+    bucket         = "your-terraform-state-bucket"
+    key            = "terraform/state"
+    region         = "us-west-2"
+    dynamodb_table = "terraform-state-lock"
+    encrypt        = true
+  }
+}
+
+# 3. Мігруйте state
+terraform init -migrate-state
+```
 
 ### З RDS на Aurora
 
@@ -508,6 +621,16 @@ spec:
 
 ## 🛡️ Безпека
 
+### S3 Backend безпека
+
+Модуль автоматично налаштовує:
+- **Шифрування** всіх об'єктів в S3
+- **Версіонування** для відстеження змін
+- **Блокування публічного доступу**
+- **Політику HTTPS-only**
+- **Lifecycle правила** для оптимізації вартості
+- **Point-in-Time Recovery** для DynamoDB
+
 ### Рекомендації
 
 1. **Паролі**: Використовуйте AWS Secrets Manager або змінні середовища
@@ -565,6 +688,20 @@ roleRef:
 
 ## 💰 Оптимізація вартості
 
+### S3 Backend оптимізація
+
+```hcl
+# Для розробки
+dynamodb_billing_mode = "PAY_PER_REQUEST"  # Платіть тільки за використання
+state_retention_days  = 30                 # Коротший період зберігання
+enable_access_logging = false              # Вимкнути логування
+
+# Для продакшну
+dynamodb_billing_mode = "PROVISIONED"      # Передбачувана вартість
+enable_dynamodb_autoscaling = true         # Автоскейлінг для оптимізації
+enable_cloudwatch_alarms = true            # Моніторинг для контролю
+```
+
 ### Для розробки
 ```hcl
 # RDS
@@ -620,6 +757,22 @@ aurora_serverless_v2_scaling = {
 
 ## 🔍 Моніторинг та логування
 
+### S3 Backend моніторинг
+
+```hcl
+# Увімкнення моніторингу
+enable_cloudwatch_alarms = true
+sns_topic_arn = "arn:aws:sns:region:account:topic"
+
+# Логування доступу
+enable_access_logging = true
+```
+
+Доступні алерти:
+- DynamoDB read/write throttling
+- Автоматичне масштабування
+- Помилки доступу до S3
+
 ### CloudWatch Logs
 ```hcl
 enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
@@ -647,6 +800,21 @@ kubectl port-forward svc/prometheus-grafana 3000:80
 
 ## 🚨 Усунення проблем
 
+### S3 Backend проблеми
+
+1. **Бакет вже існує**: Змініть назву бакета на унікальну
+2. **Права доступу**: Переконайтеся, що у вас є права на створення S3 та DynamoDB
+3. **Регіон**: Перевірте, що всі ресурси в одному регіоні
+4. **State lock**: Якщо state заблокований, видаліть запис з DynamoDB
+
+```bash
+# Розблокування state
+terraform force-unlock LOCK_ID
+
+# Перевірка стану DynamoDB
+aws dynamodb scan --table-name terraform-state-lock
+```
+
 ### Поширені помилки
 
 1. **Недостатньо підмереж**: Потрібно мінімум 2 підмережі в різних AZ
@@ -658,6 +826,13 @@ kubectl port-forward svc/prometheus-grafana 3000:80
 ### Корисні команди
 
 ```bash
+# S3 Backend
+# Перевірка бакета
+aws s3 ls s3://your-terraform-state-bucket
+
+# Перевірка DynamoDB
+aws dynamodb describe-table --table-name terraform-state-lock
+
 # Terraform
 # Перевірка стану
 terraform state list
