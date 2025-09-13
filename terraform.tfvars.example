@@ -1,0 +1,36 @@
+# Приклад файлу terraform.tfvars
+# Скопіюйте цей файл як terraform.tfvars та заповніть своїми значеннями
+
+# AWS налаштування
+aws_region = "us-west-2"
+
+# VPC налаштування
+vpc_cidr = "10.0.0.0/16"
+availability_zones = ["us-west-2a", "us-west-2b"]
+public_subnet_cidrs = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs = ["10.0.10.0/24", "10.0.20.0/24"]
+
+# RDS налаштування
+use_aurora = false  # true для Aurora, false для звичайної RDS
+db_engine = "postgres"  # postgres, mysql, mariadb
+db_engine_version = "15.4"
+db_instance_class = "db.t3.micro"
+
+# База даних
+database_name = "myapp"
+db_username = "dbadmin"
+db_password = "your-secure-password-here"  # ЗМІНІТЬ НА БЕЗПЕЧНИЙ ПАРОЛЬ!
+
+# Додаткові налаштування
+multi_az = false
+backup_retention_period = 7
+backup_window = "03:00-04:00"
+maintenance_window = "sun:04:00-sun:05:00"
+
+# Теги
+common_tags = {
+  Environment = "dev"
+  Project     = "terraform-rds-module"
+  ManagedBy   = "terraform"
+  Owner       = "your-name"
+}
